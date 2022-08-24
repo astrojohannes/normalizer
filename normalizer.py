@@ -52,6 +52,7 @@ class start(QObject):
         
         self.gui.label_8.setHidden(True)
         self.gui.lineEdit_interior_knots.setHidden(True)
+        self.gui.lineEdit_fixpoints.setHidden(True)
         
         self.gui.setGeometry(0, 0, 700, 680)        
         self.gui.show()
@@ -282,6 +283,13 @@ class start(QObject):
 #                                  FITTING 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def find_nearest_idx(self, array, value):
+        array = np.asarray(array)
+        idx = (np.abs(array - value)).argmin()
+        return idx
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def fit_spline(self, showfit=True):
 
         """ Fit a spline using different methods
@@ -311,22 +319,41 @@ class start(QObject):
 
         s = int(self.gui.lineEdit_smooth.text())
 
-        # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannit handle
+        # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
         # A workaround is to use zero weights for not-a-number data points:
         w = np.isnan(y)
         y[w] = 0.
+        # the weights are found after inverting
+        w=~w
+        w=np.array(w,dtype=np.float64)
         if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
+            
+            # knot points where the polynomials connect
             tu=self.gui.lineEdit_interior_knots.text()
             tu=tu.split(',')
+            
+            # user input of knot points
             if len(tu)>1:
                 t=np.array([float(x) for x in tu],dtype=float)
+            # or use every ith value along x as knot point
             else:
                 every=int(self.gui.lineEdit_interior_knots.text())
                 t=self.gui.xcurrent[1:-1:every]
                 t=t[~np.isnan(t)]
-            spl = self.gui.method(x, y, t, k=k, w=~w)
+
+            # if user provided fixpoints, raise their weights to infinity
+            wu=self.gui.lineEdit_fixpoints.text()
+            wu=wu.split(',')
+            if len(wu)>0 and wu[0].strip() != '':
+                wu=np.array([float(a) for a in wu],dtype=float)
+                for fp in wu:
+                    w[self.find_nearest_idx(x,fp)]=1e10
+            
+            # do the fit
+            spl = self.gui.method(x, y, t, k=k, w=w)
         else:
-            spl = self.gui.method(x, y, k=k, w=~w)
+            # do the fit
+            spl = self.gui.method(x, y, k=k, w=w)
             spl.set_smoothing_factor(s)
 
         # normalize: divide spline
@@ -371,6 +398,8 @@ class start(QObject):
         if current_method=='UnivariateSpline':
             self.gui.label_8.setHidden(True)
             self.gui.lineEdit_interior_knots.setHidden(True)
+            self.gui.label_9.setHidden(True)
+            self.gui.lineEdit_fixpoints.setHidden(True)
             
             self.gui.label_2.setHidden(False)
             self.gui.lineEdit_smooth.setHidden(False)
@@ -382,6 +411,9 @@ class start(QObject):
 
             self.gui.label_8.setHidden(False)
             self.gui.lineEdit_interior_knots.setHidden(False)
+            self.gui.label_9.setHidden(False)
+            self.gui.lineEdit_fixpoints.setHidden(False)
+            
             self.gui.method=LSQUnivariateSpline
  
 
@@ -478,8 +510,8 @@ class start(QObject):
         for row in range(table.rowCount()):
             l = table.item(row, 0)
             w = table.item(row, 1)
-            c = float(l.text()) if l is not None else np.nan
-            w = float(w.text()) if w is not None else np.nan
+            c = float(l.text().strip()) if (l != '') and (l is not None) else np.nan
+            w = float(w.text().strip()) if (w != '') and (w is not None) else np.nan
             if c != np.nan and c>0 and w != np.nan and w>0:
                 lines.append(c)
                 widths.append(w)

@@ -14,7 +14,7 @@
     <x>0</x>
     <y>0</y>
     <width>700</width>
-    <height>650</height>
+    <height>700</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -26,13 +26,13 @@
   <property name="minimumSize">
    <size>
     <width>700</width>
-    <height>650</height>
+    <height>700</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>700</width>
-    <height>650</height>
+    <height>700</height>
    </size>
   </property>
   <property name="font">
@@ -50,7 +50,7 @@
       <x>10</x>
       <y>16</y>
       <width>871</width>
-      <height>621</height>
+      <height>661</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -163,6 +163,33 @@
            </item>
            <item>
             <widget class="QLineEdit" name="lineEdit_interior_knots">
+             <property name="minimumSize">
+              <size>
+               <width>110</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>110</width>
+               <height>16777215</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_11">
+           <item>
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Fixpoints</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="lineEdit_fixpoints">
              <property name="minimumSize">
               <size>
                <width>110</width>
