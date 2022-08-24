@@ -28,6 +28,7 @@ from specutils.manipulation import extract_region
 from scipy.interpolate import UnivariateSpline, InterpolatedUnivariateSpline, LSQUnivariateSpline
 
 from exp_mask import exp_mask
+from ispec_helper import *
 
 class start(QObject):
 
@@ -104,6 +105,11 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
         
     def new_home(self, *args, **kwargs):
+        
+        """ add some functionality to matplotlib's home button
+        
+        """
+        
         self.gui.xcurrent=self.gui.x
         self.gui.ycurrent=self.gui.y
         self.gui.ymaskedcurrent=self.gui.y
@@ -227,7 +233,10 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def make_fig(self,figid):
-      
+        
+        """ make the 2-panel matplotlib figure
+        """
+        
         plt.ion()
         fig = self.gui.fig
         plt.subplots_adjust(left=0.11, bottom=0.1, right=0.98, top=0.98, wspace=0, hspace=0)
@@ -252,7 +261,8 @@ class start(QObject):
         if len(yi)>0 and figid==0:
             self.gui.ax[0].plot(x, yi, color='r')
 
-        self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
+        #self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
+        self.gui.ax[1].set_xlabel('wavelength')
 
         # plot mask in bottom
         if len(self.gui.mask)>0:
@@ -267,7 +277,8 @@ class start(QObject):
 
     def fit_spline(self):
 
-        """ Fit a spline using the user input parameters
+        """ Fit a spline using different methods
+            and the user input parameters
         """
 
         xlim_l=float(plt.gca().get_xlim()[0])
@@ -419,6 +430,11 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def linetable_mask(self):
+        
+        """ use the user lines from the table to mask spectral regions
+            when doing the continuum normalization
+        """
+        
         self.gui.mask=np.array([])
         self.fit_spline()
         #self.gui.tableWidget.clear()
