@@ -123,7 +123,7 @@ class start(QObject):
         self.gui.xlim_h_last=max(self.gui.x)
         self.gui.xlim_l_last=min(self.gui.x)
 
-        self.fit_spline()
+        self.fit_spline(showfit=False)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -133,7 +133,7 @@ class start(QObject):
         """
         self.gui.pushButton_openfits.clicked.connect(self.selectFile)
         self.gui.comboBox_method.currentIndexChanged.connect(self.method_changed) 
-        self.gui.pushButton_normalize.clicked.connect(self.fit_spline)
+        self.gui.pushButton_normalize.clicked.connect(lambda: self.fit_spline(showfit=True))
         self.gui.pushButton_identify_mask_lines.clicked.connect(self.identify_mask)
         self.gui.pushButton_linetable_mask.clicked.connect(self.linetable_mask)
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
@@ -190,6 +190,13 @@ class start(QObject):
 
         hdus = fits.open(fitsfile)
         hdr = hdus[hduid].header
+       
+        if 'TELESCOP' in hdr and 'INSTRUME' in hdr:
+            if hdr['TELESCOP'].strip()=='NOT' and hdr['INSTRUME'].strip()=='FIES':
+                for kk in ['CTYPE2', 'CTPYE2', 'CUNIT2','CTYPE1','CUNIT1']:
+                    if kk in hdr:
+                        del hdr[kk]
+        
         img = hdus[hduid].data
         wcs = WCS(hdr)
        
@@ -232,7 +239,7 @@ class start(QObject):
 #                                  PLOTTING
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def make_fig(self,figid):
+    def make_fig(self,figid,showfit=True):
         
         """ make the 2-panel matplotlib figure
         """
@@ -258,8 +265,8 @@ class start(QObject):
 
         # Plot continnum fit in figure 0
         yi = self.gui.yi
-        if len(yi)>0 and figid==0:
-            self.gui.ax[0].plot(x, yi, color='r')
+        if len(yi)>0 and figid==0 and showfit==True:
+            self.gui.ax[0].plot(x, yi, color='r', lw=1.5)
 
         #self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
         self.gui.ax[1].set_xlabel('wavelength')
@@ -275,7 +282,7 @@ class start(QObject):
 #                                  FITTING 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def fit_spline(self):
+    def fit_spline(self, showfit=True):
 
         """ Fit a spline using different methods
             and the user input parameters
@@ -332,8 +339,8 @@ class start(QObject):
             self.gui.ynorm = ynorm
         self.gui.ynormcurrent = ynorm
 
-        self.make_fig(0)
-        self.make_fig(1)
+        self.make_fig(0,showfit=showfit)
+        self.make_fig(1,showfit=showfit)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
