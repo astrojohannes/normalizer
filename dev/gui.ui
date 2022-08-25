@@ -159,6 +159,9 @@
              <property name="text">
               <string>Knots (t)</string>
              </property>
+             <property name="textFormat">
+              <enum>Qt::AutoText</enum>
+             </property>
             </widget>
            </item>
            <item>
@@ -763,6 +766,11 @@
        </item>
        <item>
         <widget class="QLabel" name="lbl_fname">
+         <property name="font">
+          <font>
+           <pointsize>11</pointsize>
+          </font>
+         </property>
          <property name="styleSheet">
           <string notr="true">* {color:green;}</string>
          </property>
@@ -796,6 +804,11 @@
        </item>
        <item>
         <widget class="QLabel" name="lbl_fname2">
+         <property name="font">
+          <font>
+           <pointsize>11</pointsize>
+          </font>
+         </property>
          <property name="styleSheet">
           <string notr="true">* {color:red;}</string>
          </property>

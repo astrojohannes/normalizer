@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from PySide2 import QtCore, QtWidgets
-import sys
+import sys,os
 import normalizer as n
 
+os.environ["XDG_SESSION_TYPE"]='x11'
 
 if __name__ == "__main__":
     QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)
