@@ -338,7 +338,7 @@
               <bool>true</bool>
              </property>
              <property name="text">
-              <string>manual velocity shift</string>
+              <string>velocity shift</string>
              </property>
             </widget>
            </item>

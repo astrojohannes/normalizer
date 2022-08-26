@@ -281,7 +281,7 @@ class start(QObject):
         if len(self.gui.mask)>0:
             mask_edges=self.find_mask_edges()
             ii=0
-            while ii < len(mask_edges)-2:
+            while ii < len(mask_edges):
                 xx1 = float(x[mask_edges[ii]])
                 xx2 = float(x[mask_edges[ii+1]])
                 ii+=2
@@ -455,7 +455,7 @@ class start(QObject):
         
         if len(new_mask)>0:
             self.gui.mask=new_mask
-        self.fit_spline()
+        self.fit_spline(showfit=True)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -505,32 +505,6 @@ class start(QObject):
         self.fit_spline()
         #self.gui.tableWidget.clear()
         
-        """
-        specutils.conf.do_continuum_function_check = False
-        this_unit='erg cm^-2 s^-1'
-
-        # convert to specutils spectrum
-        self.gui.lamb = self.gui.xcurrent * u.AA
-        self.gui.flux = (self.gui.ynormcurrent-1) * u.Unit(this_unit)
-        spec = Spectrum1D(spectral_axis=self.gui.lamb, flux=self.gui.flux)
-
-        # find lines
-        #lines_table = find_lines_derivative(spec)
-
-        for ii,line in enumerate(lines):
-            line_center=str(round(line['line_center'].value,3))
-            line_type=str(line['line_type'])
-            if ii==0: table.setRowCount(0)
-            rowPosition = table.rowCount()
-            table.insertRow(rowPosition)
-            table.setItem(rowPosition , 0, QTableWidgetItem(line_center))
-            table.setItem(rowPosition , 1, QTableWidgetItem(line_type))
-
-        """
-
-        # win width
-        ww=int(self.gui.lineEdit_fixed_width.text())
-
         lines = []
         widths = []
         table=self.gui.tableWidget
@@ -556,31 +530,14 @@ class start(QObject):
         idx=np.unique(np.array(idx,dtype=int))
         self.gui.mask = np.array([False for x in self.gui.xcurrent])
         self.gui.mask[idx] = True
-
-        self.fit_spline()
-
-        """
-            sub_region = SpectralRegion(c-w/2, c+w/2)
-            sub_spectrum = extract_region(spec, sub_region)
-
-            # Fit the line and calculate the fitted flux values (``y_fit``)
-            g_init = models.Gaussian1D(amplitude=-0.5 * u.Unit(this_unit), mean=c, stddev=0.1*u.AA)
-            g_fit = fit_lines(sub_spectrum, g_init)
-            y_fit = g_fit(sub_spectrum.spectral_axis)
-
-            # Plot the original spectrum and the fitted.
-            plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, label="Original spectrum")
-            plt.plot(sub_spectrum.spectral_axis, y_fit, label="Fit result")
-            plt.title('Single fit peak')
-            plt.grid(True)
-            plt.legend()
-            plt.draw()
-        """
+        
+        self.fit_spline(showfit=True)
 
 #                             RADIAL VELOCITY
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
     def determine_rad_velocity(self):
-        this_spec = ispec.read_spectrum(self.gui.lbl_fname.text())
+        self.gui.currentshift=float(self.gui.lineEdit_user_velocity_shift.text())
+        self.gui.xcurrent-=self.gui.currentshift
         
         if len(self.gui.ynormcurrent)>0:
             waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
@@ -612,12 +569,13 @@ class start(QObject):
         rv = np.round(models[0].mu(), 2) # km/s
         rv_err = np.round(models[0].emu(), 2) # km/s
 
+        self.gui.xcurrent+=rv
         self.gui.lineEdit_user_velocity_shift.setText(str(rv))
 
     def apply_velocity_shift(self):
         
         if self.gui.lineEdit_user_velocity_shift.text() != None and self.gui.lineEdit_user_velocity_shift.text().strip() != '':
-            self.gui.xcurrent+=float(self.gui.lineEdit_user_velocity_shift.text())
+            # calc velocity shift between original and current spectrum
             self.fit_spline()
             self.make_fig(0)
             self.make_fig(1)
