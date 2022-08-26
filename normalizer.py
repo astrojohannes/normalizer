@@ -28,7 +28,7 @@ from specutils.manipulation import extract_region
 from scipy.interpolate import UnivariateSpline, InterpolatedUnivariateSpline, LSQUnivariateSpline
 
 from exp_mask import exp_mask
-from ispec_helper import *
+import ispec_helper as ispec
 
 class start(QObject):
 
@@ -84,6 +84,7 @@ class start(QObject):
         self.gui.lineEdit_sigma_low.setText('1.0')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
+        self.gui.lineEdit_user_velocity_shift.setText('0')
         
         self.gui.x=np.array([])     # origianl wavelength range
         self.gui.y=np.array([])     # original spectrum
@@ -140,6 +141,8 @@ class start(QObject):
         self.gui.pushButton_identify_mask_lines.clicked.connect(self.identify_mask)
         self.gui.pushButton_linetable_mask.clicked.connect(self.linetable_mask)
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
+        self.gui.pushButton_determine_rad_velocity.clicked.connect(self.determine_rad_velocity)
+        self.gui.lineEdit_user_velocity_shift.textChanged.connect(self.apply_velocity_shift)
 
 #                                 IO PART
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -266,15 +269,15 @@ class start(QObject):
 
         self.gui.ax[figid].step(x, y,color=col[figid],lw=0.8)
 
-        # Plot continnum fit in figure 0
+        # Plot continuum fit in figure 0
         yi = self.gui.yi
         if len(yi)>0 and figid==0 and showfit==True:
             self.gui.ax[0].plot(x, yi, color='r', lw=1.5)
 
         #self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
-        self.gui.ax[1].set_xlabel('wavelength')
+        self.gui.ax[1].set_xlabel('wavelength [AA]')
 
-        # plot mask in bottom
+        # plot mask in top panel
         if len(self.gui.mask)>0:
             mask_edges=self.find_mask_edges()
             ii=0
@@ -282,9 +285,9 @@ class start(QObject):
                 xx1 = float(x[mask_edges[ii]])
                 xx2 = float(x[mask_edges[ii+1]])
                 ii+=2
-                ylim_l=np.nanmin(y)
-                ylim_h=np.nanmax(y)
-                yy=np.linspace(ylim_l,ylim_h,100)
+                ylim_l=np.nanmin(self.gui.ycurrent)
+                ylim_h=np.nanmax(self.gui.ycurrent)
+                yy=np.linspace(ylim_l,ylim_h,10)
                 self.gui.ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3)
 
         # draw and show
@@ -573,3 +576,48 @@ class start(QObject):
             plt.legend()
             plt.draw()
         """
+
+#                             RADIAL VELOCITY
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+    def determine_rad_velocity(self):
+        this_spec = ispec.read_spectrum(self.gui.lbl_fname.text())
+        
+        if len(self.gui.ynormcurrent)>0:
+            waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
+        elif len(self.gui.y)>0:
+            waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.y,dtype=np.float64)
+        else:
+            self.gui.lineEdit_user_velocity_shift.setText('0')
+        err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
+        this_arr=np.vstack((waveobs,flux,err))
+        this_spec=np.core.records.fromrecords(this_arr.T, names='waveobs,flux,err')
+        this_spec=this_spec.view(np.recarray)
+
+        #--- Radial Velocity determination with template -------------------------------
+        # - Read synthetic template
+        #template = ispec.read_spectrum("./templates/Atlas.Arcturus.372_926nm/template.txt.gz")
+        #template = ispec.read_spectrum("./templates/Atlas.Sun.372_926nm/template.txt.gz")
+        template = ispec.read_spectrum("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+        template['waveobs']=template['waveobs']*10.0
+        
+        #template = ispec.read_spectrum("./templates/Synth.Sun.300_1100nm/template.txt.gz")
+
+        models, ccf = ispec.cross_correlate_with_template(this_spec, template, \
+                                lower_velocity_limit=-200, upper_velocity_limit=200, \
+                                velocity_step=1.0, fourier=False)
+
+        # Number of models represent the number of components
+        components = len(models)
+        # First component:
+        rv = np.round(models[0].mu(), 2) # km/s
+        rv_err = np.round(models[0].emu(), 2) # km/s
+
+        self.gui.lineEdit_user_velocity_shift.setText(str(rv))
+
+    def apply_velocity_shift(self):
+        
+        if self.gui.lineEdit_user_velocity_shift.text() != None and self.gui.lineEdit_user_velocity_shift.text().strip() != '':
+            self.gui.xcurrent+=float(self.gui.lineEdit_user_velocity_shift.text())
+            self.fit_spline()
+            self.make_fig(0)
+            self.make_fig(1)
