@@ -56,7 +56,7 @@ class start(QObject):
         self.gui.label_4.setHidden(True)
         self.gui.lineEdit_fixed_width.setHidden(True)
         
-        self.gui.setGeometry(0, 0, 700, 785)        
+        self.gui.setGeometry(0, 0, 700, 815)        
         self.gui.show()
 
         # figure with 2 subplots
@@ -84,7 +84,12 @@ class start(QObject):
         self.gui.lineEdit_sigma_low.setText('1.0')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
-        self.gui.lineEdit_user_velocity_shift.setText('0')
+        self.gui.lineEdit_auto_velocity_shift.setText('0')
+        self.gui.lineEdit_auto_velocity_shift_lim1.setText('-50')
+        self.gui.lineEdit_auto_velocity_shift_lim2.setText('50')
+        self.gui.veloshift_current=0.0
+        self.gui.rv=0.0
+        self.gui.rv_err=0.0
         
         self.gui.x=np.array([])     # origianl wavelength range
         self.gui.y=np.array([])     # original spectrum
@@ -96,7 +101,7 @@ class start(QObject):
         self.gui.ynorm=np.array([]) # normalized array
         
         
-        self.gui.xcurrent=np.array([])    # x,y currently used for manipulation
+        self.gui.xcurrent=np.array([])
         self.gui.ycurrent=np.array([])    # figure 0
         self.gui.ynormcurrent=np.array([])    # figure 1
         self.gui.ymaskedcurrent=np.array([])
@@ -120,6 +125,7 @@ class start(QObject):
         self.gui.ynormcurrent=self.gui.ynorm
         self.gui.yi=np.array([])
         self.gui.mask=np.array([])
+        self.gui.veloshift_current=0.0
 
         self.gui.ax[0].set_xlim([min(self.gui.x),max(self.gui.x)])        
         self.gui.ax[1].set_xlim([min(self.gui.x),max(self.gui.x)])        
@@ -142,7 +148,7 @@ class start(QObject):
         self.gui.pushButton_linetable_mask.clicked.connect(self.linetable_mask)
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
         self.gui.pushButton_determine_rad_velocity.clicked.connect(self.determine_rad_velocity)
-        self.gui.lineEdit_user_velocity_shift.textChanged.connect(self.apply_velocity_shift)
+        self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
 
 #                                 IO PART
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -224,7 +230,12 @@ class start(QObject):
         self.gui.ycurrent = y
         self.gui.ymaskedcurrent = y
         self.gui.hdr = hdr
-
+        self.gui.ynorm=np.array([])
+        self.gui.ynormcurrent=np.array([])
+        self.gui.yi=np.array([])
+        self.gui.veloshift_current=0.0
+        
+        
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def writefits(self,fitsfile,hduid=0):
@@ -451,7 +462,7 @@ class start(QObject):
         mask_high = (abs(ysmooth-np.mean(ysmooth)) > snr_high*rms)
         mask_low  = (abs(ysmooth-np.mean(ysmooth)) > snr_low*rms)
         
-        new_mask = np.array(exp_mask(mask_high,constraint=mask_low, iters=20, keep_mask=True, quiet=True),dtype=bool)
+        new_mask = np.array(exp_mask(mask_high,constraint=mask_low, iters=10000, keep_mask=True, quiet=True),dtype=bool)
         
         if len(new_mask)>0:
             self.gui.mask=new_mask
@@ -536,15 +547,14 @@ class start(QObject):
 #                             RADIAL VELOCITY
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
     def determine_rad_velocity(self):
-        self.gui.currentshift=float(self.gui.lineEdit_user_velocity_shift.text())
-        self.gui.xcurrent-=self.gui.currentshift
-        
+
         if len(self.gui.ynormcurrent)>0:
-            waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
-        elif len(self.gui.y)>0:
-            waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.y,dtype=np.float64)
+            waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
+        elif len(self.gui.ycurrent)>0:
+            waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ycurrent,dtype=np.float64)
         else:
-            self.gui.lineEdit_user_velocity_shift.setText('0')
+            self.gui.rv=0.0
+            self.gui.lineEdit_auto_velocity_shift.setText('0')
         err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
         this_arr=np.vstack((waveobs,flux,err))
         this_spec=np.core.records.fromrecords(this_arr.T, names='waveobs,flux,err')
@@ -560,22 +570,32 @@ class start(QObject):
         #template = ispec.read_spectrum("./templates/Synth.Sun.300_1100nm/template.txt.gz")
 
         models, ccf = ispec.cross_correlate_with_template(this_spec, template, \
-                                lower_velocity_limit=-200, upper_velocity_limit=200, \
+                                lower_velocity_limit=float(self.gui.lineEdit_auto_velocity_shift_lim1.text()), upper_velocity_limit=float(self.gui.lineEdit_auto_velocity_shift_lim2.text()), \
                                 velocity_step=1.0, fourier=False)
 
         # Number of models represent the number of components
         components = len(models)
-        # First component:
-        rv = np.round(models[0].mu(), 2) # km/s
-        rv_err = np.round(models[0].emu(), 2) # km/s
-
-        self.gui.xcurrent+=rv
-        self.gui.lineEdit_user_velocity_shift.setText(str(rv))
-
-    def apply_velocity_shift(self):
+        if components>0:
+            # First component:
+            rv_new = models[0].mu() # km/s
+            rv_err_new = models[0].emu() # km/s
+            self.gui.lineEdit_auto_velocity_shift.setText(str(np.round(rv_new,2)))
         
-        if self.gui.lineEdit_user_velocity_shift.text() != None and self.gui.lineEdit_user_velocity_shift.text().strip() != '':
-            # calc velocity shift between original and current spectrum
-            self.fit_spline()
-            self.make_fig(0)
-            self.make_fig(1)
+        else:
+            rv_new=0
+            self.gui.lineEdit_auto_velocity_shift.setText('0')
+               
+        self.apply_velocity_shift(rv_new)
+
+    def apply_velocity_shift(self,rv_new=0.0):
+        
+        if rv_new==0:
+            rv_new=float(self.gui.lineEdit_auto_velocity_shift.text())
+        new_xcurrent=np.copy(self.gui.xcurrent)+rv_new-self.gui.rv
+        self.gui.xcurrent=new_xcurrent
+        self.gui.rv=rv_new
+        self.fit_spline()
+        self.make_fig(0)
+        self.make_fig(1)
+        
+        
