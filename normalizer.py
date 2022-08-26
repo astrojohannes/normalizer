@@ -56,7 +56,7 @@ class start(QObject):
         self.gui.label_4.setHidden(True)
         self.gui.lineEdit_fixed_width.setHidden(True)
         
-        self.gui.setGeometry(0, 0, 700, 700)        
+        self.gui.setGeometry(0, 0, 700, 785)        
         self.gui.show()
 
         # figure with 2 subplots
