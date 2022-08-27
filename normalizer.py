@@ -304,6 +304,7 @@ class start(QObject):
         # draw and show
         plt.draw()
         plt.show(block=False)
+        self.gui.activateWindow()
 #                                  FITTING 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -462,7 +463,7 @@ class start(QObject):
         mask_high = (abs(ysmooth-np.mean(ysmooth)) > snr_high*rms)
         mask_low  = (abs(ysmooth-np.mean(ysmooth)) > snr_low*rms)
         
-        new_mask = np.array(exp_mask(mask_high,constraint=mask_low, iters=10000, keep_mask=True, quiet=True),dtype=bool)
+        new_mask = np.array(exp_mask(mask_high,constraint=mask_low, iters=100, keep_mask=True, quiet=True),dtype=bool)
         
         if len(new_mask)>0:
             self.gui.mask=new_mask
