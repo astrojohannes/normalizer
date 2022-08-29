@@ -1,7 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 #
 #
-# The code in this file was taken from iSpec, written by Sergi Blanco-Cuaresma (http://www.blancocuaresma.com/s/).
+# The code in this file was taken from iSpec, written by
+# Sergi Blanco-Cuaresma (http://www.blancocuaresma.com/s/).
 # Some parts were modified to be used in the "normalizer".
+#
 #
 #
 import numpy as np

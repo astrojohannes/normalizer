@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from PySide2 import QtCore, QtGui, QtWidgets
@@ -165,11 +166,20 @@ class start(QObject):
 
         filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("Spectrum (*.fits)"))
  
-        self.gui.lbl_fname.setText(filename)
+        if mydir == QtCore.QDir.currentPath():
+            self.gui.lbl_fname.setText(os.path.basename(filename))
+        else:
+            self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
         self.make_fig(0)
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def zoom_fig(self,wave_min,wave_max):
+        self.gui.ax[0].set_xlim([wave_min,wave_max])
+        #self.gui.ax[1].set_xlim()
+  
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def saveFile(self):
@@ -234,7 +244,8 @@ class start(QObject):
         self.gui.ynormcurrent=np.array([])
         self.gui.yi=np.array([])
         self.gui.veloshift_current=0.0
-        
+
+        self.fit_spline()
         
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -279,11 +290,16 @@ class start(QObject):
         col=['b','g']
 
         self.gui.ax[figid].step(x, y,color=col[figid],lw=0.8)
+        
+        if figid==0:
+            self.gui.ax[0].text(0.03,0.9,'Original',fontsize=20,transform=self.gui.ax[0].transAxes)
+        elif figid==1:
+            self.gui.ax[1].text(0.03,0.9,'Normalized',fontsize=20,transform=self.gui.ax[1].transAxes)
 
         # Plot continuum fit in figure 0
         yi = self.gui.yi
         if len(yi)>0 and figid==0 and showfit==True:
-            self.gui.ax[0].plot(x, yi, color='r', lw=1.5)
+            self.gui.ax[0].plot(x, yi, color='r', lw=1.5, label='spline fit')
 
         #self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
         self.gui.ax[1].set_xlabel('wavelength [AA]')
@@ -299,7 +315,7 @@ class start(QObject):
                 ylim_l=np.nanmin(self.gui.ycurrent)
                 ylim_h=np.nanmax(self.gui.ycurrent)
                 yy=np.linspace(ylim_l,ylim_h,10)
-                self.gui.ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3)
+                self.gui.ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3, label='masked region')
 
         # draw and show
         plt.draw()
