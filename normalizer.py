@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PySide2 import QtCore, QtGui, QtWidgets
-from PySide2.QtWidgets import *
-from PySide2.QtUiTools import QUiLoader
-from PySide2.QtWidgets import QApplication, QTableWidgetItem
-from PySide2.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel
-from PySide2.QtGui import QIcon, QPixmap, QWindow
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidgetItem
+from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication
+from PyQt5.QtGui import QIcon, QPixmap, QWindow
+from PyQt5.uic import loadUi
 
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.backend_bases import NavigationToolbar2
 import os,sys
+
+mpl.rcParams['text.usetex'] = False
 
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -39,14 +40,10 @@ class start(QObject):
         """
 
         super(start, self).__init__(parent)
-        ui_file = QFile(ui_file)
-        if not ui_file.open(QIODevice.ReadOnly):
-            print(f"Cannot open {ui_file}: {ui_file.errorString()}")
-            sys.exit(-1)
-        loader = QUiLoader()
-        self.gui = loader.load(ui_file)
-        ui_file.close()
-
+        
+        self.gui = QMainWindow()
+        loadUi(ui_file, self.gui)
+        
         if not self.gui:
             print(loader.errorString())
             sys.exit(-1)
@@ -144,7 +141,7 @@ class start(QObject):
         """
         self.gui.pushButton_openfits.clicked.connect(self.selectFile)
         self.gui.comboBox_method.currentIndexChanged.connect(self.method_changed) 
-        self.gui.pushButton_normalize.clicked.connect(lambda: self.fit_spline(showfit=True))
+        self.gui.pushButton_normalize.clicked.connect(lambda _: self.fit_spline(showfit=True))
         self.gui.pushButton_identify_mask_lines.clicked.connect(self.identify_mask)
         self.gui.pushButton_linetable_mask.clicked.connect(self.linetable_mask)
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
@@ -162,11 +159,11 @@ class start(QObject):
         if self.gui.lbl_fname.text() is not None and os.path.isfile(self.gui.lbl_fname.text()):
             mydir = os.path.dirname(self.gui.lbl_fname.text())
         else:
-            mydir = QtCore.QDir.currentPath()
+            mydir = QDir.currentPath()
 
         filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("Spectrum (*.fits)"))
  
-        if mydir == QtCore.QDir.currentPath():
+        if mydir == QDir.currentPath():
             self.gui.lbl_fname.setText(os.path.basename(filename))
         else:
             self.gui.lbl_fname.setText(filename)
@@ -202,7 +199,67 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def readfits(self,fitsfile,hduid=0):
+    def readfits(self, fitsfile, hduid=0):
+        self.gui.ax[0].cla()
+        self.gui.ax[1].cla()
+    
+        # Read the input file
+        if fitsfile.lower().endswith('.fits') or fitsfile.lower().endswith('.fit'):
+            # If the input file is a FITS file, read it using Astropy's fits module
+            hdus = fits.open(fitsfile)
+            # Check if a BinTableHDU exists in the list of HDUs
+            binary_table_hdu = None
+            for hdu in hdus:
+                if isinstance(hdu, fits.BinTableHDU):
+                    binary_table_hdu = hdu
+                    break
+            # Load binary table data if it exists
+            if binary_table_hdu is not None:
+                x = binary_table_hdu.data['Wavelength']
+                y = binary_table_hdu.data['Normalized_Flux']
+                hdr = binary_table_hdu.header
+            else:
+                # Otherwise, assume a regular FITS file and load image data
+                hdr = hdus[hduid].header
+                img = hdus[hduid].data
+                wcs = WCS(hdr)
+                if int(hdr['NAXIS']) == 2:
+                    y = img.sum(axis=0)   # summing up along spatial direction
+                    x = wcs.all_pix2world([(x, 0) for x in range(len(y))], 0)
+                    x = np.delete(x, 1, axis=1)
+                    x = x.flatten()
+                    y = y.flatten()
+                elif int(hdr['NAXIS']) == 1:
+                    y = img
+                    x = wcs.all_pix2world([x for x in range(len(y))], 0)[0]
+        else:
+            # Otherwise, assume the input file is an ASCII file and read it using numpy
+            if fitsfile.lower().endswith('.csv'):
+                delimiter = ','
+            else:
+                delimiter = '\t'
+            data = np.loadtxt(fitsfile, delimiter=delimiter, comments='#')
+            x = data[:, 0]
+            y = data[:, 1]
+            hdr = fits.Header()
+    
+        # Save re-usable quantities in global variables
+        self.gui.x = x
+        self.gui.y = y
+        self.gui.xcurrent = x
+        self.gui.ycurrent = y
+        self.gui.ymaskedcurrent = y
+        self.gui.hdr = hdr
+        self.gui.ynorm = np.array([])
+        self.gui.ynormcurrent = np.array([])
+        self.gui.yi = np.array([])
+        self.gui.veloshift_current = 0.0
+    
+        self.fit_spline()
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def readfits_old(self,fitsfile,hduid=0):
 
         self.gui.ax[0].cla()
         self.gui.ax[1].cla()
@@ -249,7 +306,34 @@ class start(QObject):
         
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def writefits(self,fitsfile,hduid=0):
+    def writefits(self, fitsfile, hduid=0):
+        """ Save normalized spectrum in
+            user fits file
+        """
+    
+        # Create columns for wavelength (x-axis) and normalized flux (y-axis)
+        col1 = fits.Column(name='Wavelength', format='E', array=self.gui.xcurrent)
+        col2 = fits.Column(name='Normalized_Flux', format='E', array=self.gui.ynormcurrent)
+    
+        # Create a ColDefs object from the columns
+        cols = fits.ColDefs([col1, col2])
+    
+        # Create a BinTableHDU object from the ColDefs object
+        tbhdu = fits.BinTableHDU.from_columns(cols)
+    
+        # Create a new header for the output file
+        new_hdr = fits.Header()
+        new_hdr['SIMPLE'] = True
+        new_hdr['BITPIX'] = -32  # For single-precision floating-point values
+        new_hdr['NAXIS'] = 2
+        new_hdr['EXTEND'] = True
+    
+        # Write the data to the output FITS file
+        tbhdu.writeto(self.gui.lbl_fname2.text(), overwrite=True)
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def writefits_old(self,fitsfile,hduid=0):
 
         """ Save normalized spectrum in
             user fits file
@@ -308,7 +392,7 @@ class start(QObject):
         if len(self.gui.mask)>0:
             mask_edges=self.find_mask_edges()
             ii=0
-            while ii < len(mask_edges):
+            while ii < len(mask_edges)-2:
                 xx1 = float(x[mask_edges[ii]])
                 xx2 = float(x[mask_edges[ii+1]])
                 ii+=2
@@ -402,8 +486,8 @@ class start(QObject):
         # normalize: divide spline
         yi=np.copy(spl(x)).flatten()
                     
-        ynorm = np.array(self.gui.ycurrent) / np.array(yi)
-        
+        ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
+
         self.gui.yi = np.array(yi)
         if not len(self.gui.ynorm)>0:
             self.gui.ynorm = ynorm
@@ -512,7 +596,8 @@ class start(QObject):
             self.gui.ymaskedcurrent = np.copy(self.gui.ycurrent)
             
         nans, x= self.nan_helper(self.gui.ymaskedcurrent)
-        self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
+        if np.any(~nans):
+            self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
