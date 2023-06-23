@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication
 from PyQt5.QtGui import QIcon, QPixmap, QWindow
 from PyQt5.uic import loadUi
 
 import numpy as np
+from numpy import inf, nan
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -18,19 +19,31 @@ mpl.rcParams['text.usetex'] = False
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units as u
-from astropy.modeling import models
+from astropy.modeling import models, fitting
 
-"""
-import specutils
-from specutils import Spectrum1D, SpectralRegion
-from specutils.fitting import estimate_line_parameters, find_lines_derivative, fit_lines
-from specutils.manipulation import extract_region
-"""
+from scipy.interpolate import UnivariateSpline, InterpolatedUnivariateSpline, LSQUnivariateSpline, interp1d
+from scipy.signal import correlate
+from scipy.optimize import curve_fit
+from scipy.stats import norm
 
-from scipy.interpolate import UnivariateSpline, InterpolatedUnivariateSpline, LSQUnivariateSpline
-
+from mask_peaks import PeakMask
 from exp_mask import exp_mask
-import ispec_helper as ispec
+
+class TableWidget(QTableWidget):
+    def __init__(self, *args, **kwargs):
+        super(TableWidget, self).__init__(*args, **kwargs)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete:
+            selected = self.selectionModel().selectedRows()
+            for row in selected:
+                row = row.row()
+                for col in range(self.columnCount()):
+                    item = self.item(row, col)
+                    if item is not None:  # Check if item is valid
+                        item.setText('')
+        else:
+            super().keyPressEvent(event)
 
 class start(QObject):
 
@@ -78,7 +91,7 @@ class start(QObject):
         
         self.gui.lineEdit_degree.setText('3')
         self.gui.lineEdit_smooth.setText('20')
-        self.gui.lineEdit_sigma_high.setText('1.8')
+        self.gui.lineEdit_sigma_high.setText('2.0')
         self.gui.lineEdit_sigma_low.setText('1.0')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
@@ -108,6 +121,42 @@ class start(QObject):
         
         self.gui.xlim_l_last=0
         self.gui.xlim_h_last=0
+
+        # Identify the layout that contains the tableWidget
+        layout = self.gui.horizontalLayout_6
+
+        # Store properties of old table widget that you want to copy
+        old_widget = self.gui.tableWidget
+        old_header_horizontal = old_widget.horizontalHeader().saveState()
+        old_header_vertical = old_widget.verticalHeader().saveState()
+
+        column_names = [old_widget.horizontalHeaderItem(i).text() for i in range(old_widget.columnCount())]
+
+        min_width = old_widget.minimumWidth()
+        max_width = old_widget.maximumWidth()
+        min_height = old_widget.minimumHeight()
+        max_height = old_widget.maximumHeight()
+
+        # Remove the existing tableWidget
+        layout.removeWidget(self.gui.tableWidget)
+        self.gui.tableWidget.deleteLater()
+
+        # Create a new instance of TableWidget and add it to the layout
+        self.gui.tableWidget = TableWidget(300, 2, self.gui)
+        layout.addWidget(self.gui.tableWidget)
+
+        # Restore properties on the new widget
+        self.gui.tableWidget.horizontalHeader().restoreState(old_header_horizontal)
+        self.gui.tableWidget.verticalHeader().restoreState(old_header_vertical)
+
+        # Set column names
+        self.gui.tableWidget.setHorizontalHeaderLabels(column_names)
+
+        # Set minimum and maximum width and height
+        self.gui.tableWidget.setMinimumWidth(min_width)
+        self.gui.tableWidget.setMaximumWidth(max_width)
+        self.gui.tableWidget.setMinimumHeight(min_height)
+        self.gui.tableWidget.setMaximumHeight(max_height)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
         
@@ -199,6 +248,55 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def remove_spikes(self, indata, n_std=10):
+        """
+        Iteratively remove spikes from the edges of a 1D spectrum if they exceed a certain threshold.
+    
+        Parameters:
+            data: numpy array of 1D spectrum.
+            n_std: number of standard deviations above/below the mean to use as a threshold for spikes.
+        
+        Returns:
+            The cleaned spectrum.
+        """
+
+        data = self.smooth(indata,1000)
+
+        # Calculate mean and standard deviation of the data
+        mean = np.mean(data)
+        std = np.std(data)
+    
+        # Define threshold
+        threshold_upper = mean + n_std * std
+        threshold_lower = mean - n_std * std
+    
+        # Define indices for iterative edge spike check
+        start_index = 0
+        end_index = len(data) - 1
+    
+        # Check for spikes from edges towards the center
+        while start_index < end_index:
+            # Check start
+            if data[start_index] > threshold_upper or data[start_index] < threshold_lower:
+                start_index += 1
+            else:
+                # If no spike is found, stop the iteration
+                break
+            
+        # Start from the end and move towards the start
+        while end_index >= start_index:
+            # Check end
+            if data[end_index] > threshold_upper or data[end_index] < threshold_lower:
+                end_index -= 1
+            else:
+                # If no spike is found, stop the iteration
+                break
+            
+        # Return the cleaned spectrum
+        return start_index, end_index+1
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def readfits(self, fitsfile, hduid=0):
         self.gui.ax[0].cla()
         self.gui.ax[1].cla()
@@ -231,7 +329,10 @@ class start(QObject):
                     y = y.flatten()
                 elif int(hdr['NAXIS']) == 1:
                     y = img
-                    x = wcs.all_pix2world([x for x in range(len(y))], 0)[0]
+                    crpix1 = hdr['CRPIX1']  # Pixel coordinate of reference point
+                    crval1 = hdr['CRVAL1']  # Coordinate value at reference point
+                    cdelt1 = hdr['CDELT1']  # Coordinate increment at reference point
+                    x = crval1 + cdelt1 * (np.arange(len(y)) - (crpix1 - 1))
         else:
             # Otherwise, assume the input file is an ASCII file and read it using numpy
             if fitsfile.lower().endswith('.csv'):
@@ -242,7 +343,10 @@ class start(QObject):
             x = data[:, 0]
             y = data[:, 1]
             hdr = fits.Header()
-    
+   
+        # detect spikes at edges
+        start, end = self.remove_spikes(y)
+
         # Save re-usable quantities in global variables
         self.gui.x = x
         self.gui.y = y
@@ -254,56 +358,12 @@ class start(QObject):
         self.gui.ynormcurrent = np.array([])
         self.gui.yi = np.array([])
         self.gui.veloshift_current = 0.0
-    
-        self.fit_spline()
+   
+        self.gui.xlim_h_last=0
+        self.gui.xlim_l_last=0
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+        #self.fit_spline()
 
-    def readfits_old(self,fitsfile,hduid=0):
-
-        self.gui.ax[0].cla()
-        self.gui.ax[1].cla()
-
-        """ Read the fits file selected by user
-        """
-
-        hdus = fits.open(fitsfile)
-        hdr = hdus[hduid].header
-       
-        if 'TELESCOP' in hdr and 'INSTRUME' in hdr:
-            if hdr['TELESCOP'].strip()=='NOT' and hdr['INSTRUME'].strip()=='FIES':
-                for kk in ['CTYPE2', 'CTPYE2', 'CUNIT2','CTYPE1','CUNIT1']:
-                    if kk in hdr:
-                        del hdr[kk]
-        
-        img = hdus[hduid].data
-        wcs = WCS(hdr)
-       
-        # make spectral axis
-        if int(hdr['NAXIS'])==2:
-            y = img.sum(axis=0)   # summing up along spatial direction
-            x = wcs.all_pix2world([(x,0) for x in range(len(y))], 0)
-            x = np.delete(x,1,axis=1)
-            x = x.flatten()
-            y = y.flatten()
-        elif int(hdr['NAXIS'])==1:
-            y = img
-            x = wcs.all_pix2world([x for x in range(len(y))], 0)[0]
-
-        # save re-usable quantities in global variables
-        self.gui.x = x
-        self.gui.y = y
-        self.gui.xcurrent = x
-        self.gui.ycurrent = y
-        self.gui.ymaskedcurrent = y
-        self.gui.hdr = hdr
-        self.gui.ynorm=np.array([])
-        self.gui.ynormcurrent=np.array([])
-        self.gui.yi=np.array([])
-        self.gui.veloshift_current=0.0
-
-        self.fit_spline()
-        
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def writefits(self, fitsfile, hduid=0):
@@ -331,23 +391,8 @@ class start(QObject):
         # Write the data to the output FITS file
         tbhdu.writeto(self.gui.lbl_fname2.text(), overwrite=True)
 
+
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-
-    def writefits_old(self,fitsfile,hduid=0):
-
-        """ Save normalized spectrum in
-            user fits file
-        """
-        
-        # cleanup header
-        hdr=self.gui.hdr
-        
-        for kk in ['NAXIS2','CRPIX2','CDELT2','CTYPE2','CRVAL2']:
-            if kk in hdr: del hdr[kk]
-        hdr['NAXIS']=1
-        
-        fits.writeto(self.gui.lbl_fname2.text(),data=self.gui.ynormcurrent,header=hdr,overwrite=True)
-
 #                                  PLOTTING
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -360,11 +405,14 @@ class start(QObject):
         fig = self.gui.fig
         plt.subplots_adjust(left=0.11, bottom=0.1, right=0.98, top=0.98, wspace=0, hspace=0)
 
-        self.gui.ax[figid].cla()
+        self.gui.ax[figid].cla() 
 
         if self.gui.xlim_l_last>0:
             self.gui.ax[0].set_xlim([self.gui.xlim_l_last,self.gui.xlim_h_last])
             self.gui.ax[1].set_xlim([self.gui.xlim_l_last,self.gui.xlim_h_last])
+        else:
+            self.gui.ax[0].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
+            self.gui.ax[1].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
                 
         if figid==0:
             x, y = self.gui.xcurrent, self.gui.ycurrent
@@ -421,80 +469,83 @@ class start(QObject):
             and the user input parameters
         """
 
-        xlim_l=float(plt.gca().get_xlim()[0])
-        xlim_h=float(plt.gca().get_xlim()[1])
+        if len(self.gui.xcurrent)>1:
 
-        # user has zoomed in
-        if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
-            self.gui.xcurrent=self.gui.x[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
-            self.gui.ycurrent=self.gui.y[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
+            xlim_l=float(plt.gca().get_xlim()[0])
+            xlim_h=float(plt.gca().get_xlim()[1])
 
-            self.gui.xlim_l_last=xlim_l
-            self.gui.xlim_h_last=xlim_h
+            # user has zoomed in
+            if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
+                self.gui.xcurrent=self.gui.x[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
+                self.gui.ycurrent=self.gui.y[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
+
+                self.gui.xlim_l_last=xlim_l
+                self.gui.xlim_h_last=xlim_h
+                
+                self.gui.mask=np.array([])
+                self.gui.yi=np.array([])
+                
+            self.apply_mask()
+            x, y = self.gui.xcurrent, self.gui.ymaskedcurrent
+    
+            k = int(self.gui.lineEdit_degree.text())
+            if k <=1: k=1
+            elif k>5: k=5
+    
+            # read user input: smoothing parameter
+            s = int(self.gui.lineEdit_smooth.text())
+    
+            # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
+            # A workaround is to use zero weights for not-a-number data points:
+            w = np.isnan(y)
+            y[w] = 0.
+            # the weights are found after inverting
+            w=~w
+            w=np.array(w,dtype=np.float64)
             
-            self.gui.mask=np.array([])
-            self.gui.yi=np.array([])
+            # if user provided fixpoints, raise their weights to assure that fit will intersect with these points
+            wu=self.gui.lineEdit_fixpoints.text()
+            wu=wu.split(',')
+            if len(wu)>0 and wu[0].strip() != '':
+                wu=np.array([float(a) for a in wu],dtype=float)
+                for fp in wu:
+                    w[self.find_nearest_idx(x,fp)]=1e10
             
-        self.apply_mask()
-        x, y = self.gui.xcurrent, self.gui.ymaskedcurrent
-
-        k = int(self.gui.lineEdit_degree.text())
-        if k <=1: k=1
-        elif k>5: k=5
-
-        # read user input: smoothing parameter
-        s = int(self.gui.lineEdit_smooth.text())
-
-        # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
-        # A workaround is to use zero weights for not-a-number data points:
-        w = np.isnan(y)
-        y[w] = 0.
-        # the weights are found after inverting
-        w=~w
-        w=np.array(w,dtype=np.float64)
-        
-        # if user provided fixpoints, raise their weights to assure that fit will intersect with these points
-        wu=self.gui.lineEdit_fixpoints.text()
-        wu=wu.split(',')
-        if len(wu)>0 and wu[0].strip() != '':
-            wu=np.array([float(a) for a in wu],dtype=float)
-            for fp in wu:
-                w[self.find_nearest_idx(x,fp)]=1e10
-        
-        if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
-            
-            # knot points where the polynomials connect
-            tu=self.gui.lineEdit_interior_knots.text()
-            tu=tu.split(',')
-            
-            # user input of knot points
-            if len(tu)>1:
-                t=np.array([float(x) for x in tu],dtype=float)
-            # or use every ith value along x as knot point
+            if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
+                
+                # knot points where the polynomials connect
+                tu=self.gui.lineEdit_interior_knots.text()
+                tu=tu.split(',')
+                
+                # user input of knot points
+                if len(tu)>1:
+                    t=np.array([float(x) for x in tu],dtype=float)
+                # or use every ith value along x as knot point
+                else:
+                    every=int(self.gui.lineEdit_interior_knots.text())
+                    t=self.gui.xcurrent[1:-1:every]
+                    t=t[~np.isnan(t)]
+                
+                # do the fit
+                spl = self.gui.method(x, y, t, k=k, w=w)
+                yi=np.copy(spl(x)).flatten()
+    
             else:
-                every=int(self.gui.lineEdit_interior_knots.text())
-                t=self.gui.xcurrent[1:-1:every]
-                t=t[~np.isnan(t)]
-            
-            # do the fit
-            spl = self.gui.method(x, y, t, k=k, w=w)
-        else:
-            # do the fit
-            spl = self.gui.method(x, y, k=k, w=w)
-            spl.set_smoothing_factor(s)
-
-        # normalize: divide spline
-        yi=np.copy(spl(x)).flatten()
-                    
-        ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
-
-        self.gui.yi = np.array(yi)
-        if not len(self.gui.ynorm)>0:
-            self.gui.ynorm = ynorm
-        self.gui.ynormcurrent = ynorm
-
-        self.make_fig(0,showfit=showfit)
-        self.make_fig(1,showfit=showfit)
+                # UnivariateSpline
+                # do the fit
+                spl = self.gui.method(x, y, k=k, w=w)
+                spl.set_smoothing_factor(s)
+                yi=np.copy(spl(x)).flatten()
+    
+            ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
+    
+            self.gui.yi = np.array(yi)
+            if not len(self.gui.ynorm)>0:
+                self.gui.ynorm = ynorm
+            self.gui.ynormcurrent = ynorm
+    
+            self.make_fig(0,showfit=showfit)
+            self.make_fig(1,showfit=showfit)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -543,31 +594,103 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def identify_mask(self):
-
-        """ Identify and mask lines in normed spectrum
+        """ Identify/mask lines in normed spectrum
             using rms measured over smoothed spectrum
-            and application of an expanding mask
+            iteratively until change in rms is less than 1 percent
         """
+       
+        if len(self.gui.ynormcurrent)>1:
+ 
+            del self.gui.mask
+            self.gui.mask=np.array([])
 
-        self.gui.mask=np.array([])
-        self.fit_spline()
-                
-        snr_high=float(self.gui.lineEdit_sigma_high.text())
-        snr_low=float(self.gui.lineEdit_sigma_low.text())
-        
-        y = np.copy(self.gui.ymaskedcurrent)
+            x = np.copy(self.gui.xcurrent)
+            y = np.copy(self.gui.ynormcurrent)
 
-        ysmooth = self.smooth(y,4)
-        rms=np.std(ysmooth)
+            sigma_high=float(self.gui.lineEdit_sigma_high.text())
+            sigma_low=float(self.gui.lineEdit_sigma_low.text())        
+
+            # do several iterations to improve masks
+            iters=40
+            for i in range(iters):
+
+                # Fit a 3rd degree polynomial to the data during first 2 iterations
+                if i<2:
+                    coefficients = np.polyfit(x, y, 1)
+                else:
+                    coefficients = np.polyfit(x, y, 2) 
+
+                # Create a polynomial function from the coefficients
+                polynomial = np.poly1d(coefficients)
+
+                # Evaluate the polynomial at each x-value
+                fitted_y = polynomial(x)
+
+                # Divide the original y-values by the fitted ones
+                normed_y = self.gui.ynormcurrent / fitted_y
+
+                masker_high = PeakMask(normed_y, sigma_smooth=4, sigma_threshold=sigma_high, rms_tolerance=1)
+                masker_low = PeakMask(normed_y, sigma_smooth=4, sigma_threshold=sigma_low, rms_tolerance=1)
+ 
+                mask_high = masker_high.create_mask()
+                mask_low = masker_low.create_mask()
+
+                new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
+
+                # Masked values are replaced with np.nan
+                y[new_mask==True] = np.nan
+
+                # Prepare indices for interpolation
+                x_values = np.arange(len(y))
+
+                # Find the indices where new_mask is False
+                indices_false = np.where(~new_mask)[0]
+
+                # Interpolate y values at positions where new_mask is True
+                y[new_mask] = np.interp(x_values[new_mask], x_values[~new_mask], y[~new_mask])
+
                 
-        mask_high = (abs(ysmooth-np.mean(ysmooth)) > snr_high*rms)
-        mask_low  = (abs(ysmooth-np.mean(ysmooth)) > snr_low*rms)
-        
-        new_mask = np.array(exp_mask(mask_high,constraint=mask_low, iters=100, keep_mask=True, quiet=True),dtype=bool)
-        
-        if len(new_mask)>0:
-            self.gui.mask=new_mask
-        self.fit_spline(showfit=True)
+            if len(new_mask)>0:
+               self.gui.mask=new_mask
+
+            self.fit_spline(showfit=True)
+
+
+    def identify_mask_old(self):
+        """ Identify/mask lines in normed spectrum
+            using rms measured over smoothed spectrum
+            iteratively until change in rms is less than 1 percent
+        """
+       
+        if len(self.gui.ynormcurrent)>1:
+ 
+            del self.gui.mask
+            self.gui.mask=np.array([])
+            self.fit_spline()
+
+            y = np.copy(self.gui.ynormcurrent)
+            sigma_high=float(self.gui.lineEdit_sigma_high.text())
+            sigma_low=float(self.gui.lineEdit_sigma_low.text())        
+
+            # do several iterations to improve masks
+            iters=40
+            for i in range(iters):
+                masker_high = PeakMask(y, sigma_smooth=4, sigma_threshold=sigma_high, rms_tolerance=2)
+                masker_low = PeakMask(y, sigma_smooth=4, sigma_threshold=sigma_low, rms_tolerance=2)
+ 
+                mask_high = masker_high.create_mask()
+                mask_low = masker_low.create_mask()
+
+                new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
+                
+                if len(new_mask)>0:
+                    self.gui.mask=new_mask
+
+                if i==iters:
+                    self.fit_spline(showfit=True)
+                else:
+                    self.fit_spline(showfit=True)
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -582,8 +705,26 @@ class start(QObject):
                 
         if self.gui.mask[-1]==True:
             edges.append(len(self.gui.mask))
+
+        # Calculate the center and width of each region
+        # and write these into the first and second column of the table, respectively
+        self.gui.tableWidget.setRowCount(0)
+        self.gui.tableWidget.setRowCount(300)
+
+        for i in range(0, len(edges), 2):
+            try:
+                start, end = edges[i], edges[i+1]
+                center = round((self.gui.xcurrent[start] + self.gui.xcurrent[end]) / 2,3)
+                width = round((self.gui.xcurrent[end] - self.gui.xcurrent[start])/2.0,3)
+
+                # Write center and width into the table
+                self.gui.tableWidget.setItem(i // 2, 0, QTableWidgetItem(str(center)))
+                self.gui.tableWidget.setItem(i // 2, 1, QTableWidgetItem(str(width)))
+            except IndexError:
+                break
             
         return np.array(edges)
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -648,46 +789,80 @@ class start(QObject):
 
 #                             RADIAL VELOCITY
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-    def determine_rad_velocity(self):
 
+
+    def gaussian(self, x, a, b, c):
+        """ Gaussian function to fit the peak """
+        return a * np.exp(-(x - b)**2 / (2 * c**2))
+
+    def read_template(self, file_path):
+        data = np.genfromtxt(file_path, dtype=[('waveobs', np.float64), ('flux', np.float64), ('err', np.float64)])
+        return data.view(np.recarray)
+
+    def determine_rad_velocity(self):
         if len(self.gui.ynormcurrent)>0:
             waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
-        elif len(self.gui.ycurrent)>0:
-            waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ycurrent,dtype=np.float64)
         else:
             self.gui.rv=0.0
             self.gui.lineEdit_auto_velocity_shift.setText('0')
+            return
+
         err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
         this_arr=np.vstack((waveobs,flux,err))
         this_spec=np.core.records.fromrecords(this_arr.T, names='waveobs,flux,err')
         this_spec=this_spec.view(np.recarray)
 
+        # Check and interpolate missing data for this_spec
+        mask = np.isfinite(this_spec.flux)
+        this_spec.flux = np.interp(this_spec.waveobs, this_spec.waveobs[mask], this_spec.flux[mask])
+
         #--- Radial Velocity determination with template -------------------------------
-        # - Read synthetic template
-        #template = ispec.read_spectrum("./templates/Atlas.Arcturus.372_926nm/template.txt.gz")
-        #template = ispec.read_spectrum("./templates/Atlas.Sun.372_926nm/template.txt.gz")
-        template = ispec.read_spectrum("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-        template['waveobs']=template['waveobs']*10.0
-        
-        #template = ispec.read_spectrum("./templates/Synth.Sun.300_1100nm/template.txt.gz")
+        template = self.read_template("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+        template['waveobs']=template['waveobs']*10.0    # convert to Angstroem
 
-        models, ccf = ispec.cross_correlate_with_template(this_spec, template, \
-                                lower_velocity_limit=float(self.gui.lineEdit_auto_velocity_shift_lim1.text()), upper_velocity_limit=float(self.gui.lineEdit_auto_velocity_shift_lim2.text()), \
-                                velocity_step=1.0, fourier=False)
+        # Check and interpolate missing data for template
+        mask = np.isfinite(template.flux)
+        template.flux = np.interp(template.waveobs, template.waveobs[mask], template.flux[mask])
 
-        # Number of models represent the number of components
-        components = len(models)
-        if components>0:
-            # First component:
-            rv_new = models[0].mu() # km/s
-            rv_err_new = models[0].emu() # km/s
-            self.gui.lineEdit_auto_velocity_shift.setText(str(np.round(rv_new,2)))
-        
+        # Find the overlapping wavelength range
+        start = max(np.min(this_spec.waveobs), np.min(template.waveobs))
+        stop = min(np.max(this_spec.waveobs), np.max(template.waveobs))
+
+        # Find the smallest step size
+        step = min(this_spec.waveobs[1]-this_spec.waveobs[0], template.waveobs[1]-template.waveobs[0])
+
+        # Create the common wavelength grid
+        common_waveobs = np.arange(start, stop, step)
+
+        # Create interpolation functions for the spectra
+        interp_this_spec_flux = interp1d(this_spec.waveobs, this_spec.flux, bounds_error=False, fill_value=0)
+        interp_template_flux = interp1d(template.waveobs, template.flux, bounds_error=False, fill_value=0)
+
+        # Interpolate the spectra onto the common wavelength grid
+        this_spec_flux_common = interp_this_spec_flux(common_waveobs)
+        template_flux_common = interp_template_flux(common_waveobs)
+
+        # cross-correlate the resampled spectra
+        xcorr = correlate(this_spec_flux_common, template_flux_common)
+
+        # Create an array of relative shifts
+        shifts = np.arange(len(xcorr)) - len(this_spec.flux) + 1
+
+        # Check and interpolate missing data for xcorr
+        mask = np.isfinite(xcorr)
+        xcorr = np.interp(shifts, shifts[mask], xcorr[mask])
+
+        # Fit a Gaussian to the peak to find the precise location
+        popt, pcov = curve_fit(self.gaussian, shifts, xcorr, p0=[1, 0, 10])
+
+        # The velocity shift is then the 'b' parameter from our fit
+        if abs(popt[1])<50:
+            rv_new = popt[1]
+            self.gui.lineEdit_auto_velocity_shift.setText(str(np.round(rv_new, 2)))
         else:
             rv_new=0
             self.gui.lineEdit_auto_velocity_shift.setText('0')
-               
-        self.apply_velocity_shift(rv_new)
+
 
     def apply_velocity_shift(self,rv_new=0.0):
         
