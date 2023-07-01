@@ -8,11 +8,13 @@ from PyQt5.uic import loadUi
 
 import numpy as np
 from numpy import inf, nan
+import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.backend_bases import NavigationToolbar2
 import os,sys
+import ast
 
 mpl.rcParams['text.usetex'] = False
 
@@ -53,14 +55,14 @@ class start(QObject):
         """
 
         super(start, self).__init__(parent)
-        
-        self.gui = QMainWindow()
+       
+        self.gui = QMainWindow() 
         loadUi(ui_file, self.gui)
-        
+
         if not self.gui:
             print(loader.errorString())
             sys.exit(-1)
-        
+
         self.gui.label_8.setHidden(True)
         self.gui.lineEdit_interior_knots.setHidden(True)
 
@@ -91,7 +93,7 @@ class start(QObject):
         
         self.gui.lineEdit_degree.setText('3')
         self.gui.lineEdit_smooth.setText('20')
-        self.gui.lineEdit_sigma_high.setText('2.0')
+        self.gui.lineEdit_sigma_high.setText('1.5')
         self.gui.lineEdit_sigma_low.setText('1.0')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
@@ -118,6 +120,7 @@ class start(QObject):
         self.gui.ymaskedcurrent=np.array([])
         
         self.gui.mask=np.array([])
+        self.gui.telluricmask=np.array([])
         
         self.gui.xlim_l_last=0
         self.gui.xlim_h_last=0
@@ -142,7 +145,7 @@ class start(QObject):
         self.gui.tableWidget.deleteLater()
 
         # Create a new instance of TableWidget and add it to the layout
-        self.gui.tableWidget = TableWidget(300, 2, self.gui)
+        self.gui.tableWidget = TableWidget(1000, 2, self.gui)
         layout.addWidget(self.gui.tableWidget)
 
         # Restore properties on the new widget
@@ -157,6 +160,12 @@ class start(QObject):
         self.gui.tableWidget.setMaximumWidth(max_width)
         self.gui.tableWidget.setMinimumHeight(min_height)
         self.gui.tableWidget.setMaximumHeight(max_height)
+
+        # Standard telluric absorption bands
+        telluric_intervals = self.find_telluric_intervals("skycalc_molec_abs.txt")
+        self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
+        self.gui.lineEdit_telluric_vrad.setText('0.0')
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
         
@@ -260,7 +269,7 @@ class start(QObject):
             The cleaned spectrum.
         """
 
-        data = self.smooth(indata,1000)
+        data = self.smooth(indata,100)
 
         # Calculate mean and standard deviation of the data
         mean = np.mean(data)
@@ -297,7 +306,80 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def find_telluric_intervals(self, filename):
+        # Read the data from the file
+        data = pd.read_csv(filename, sep='\t', comment='#', header=None, 
+                       names=["Wavelength", "Molecular Absorption", "Ozone", 
+                              "Rayleigh Scattering", "Aerosol Extinction"])
+
+        # Multiply the Wavelength column by 10
+        data["Wavelength"] = data["Wavelength"] * 10
+
+        # Filter the data where Molecular Absorption < 0.99
+        filtered_data = data[data["Molecular Absorption"] < 0.99]
+
+        # Find continuous regions/intervals
+        intervals = []
+        start = end = np.round(filtered_data['Wavelength'].iloc[0],3)
+    
+        for i in range(1, len(filtered_data)):
+            if filtered_data['Wavelength'].iloc[i] - end > 1:  # Change this as per the gap in your data
+                intervals.append((start, end))
+                start = np.round(filtered_data['Wavelength'].iloc[i],3)
+            end = np.round(filtered_data['Wavelength'].iloc[i],3)
+    
+        intervals.append((start, end))
+
+        return intervals
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def create_telluric_mask(self):
+
+        # Parse the intervals from the telluric line edit
+        # and shift to the observed scale
+        telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text())
+        lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
+        telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+
+        # Initialize new array for telluric mask with -1
+        self.gui.telluricmask = np.full_like(self.gui.xcurrent, -1)
+
+        # Set values enclosed by intervals to 0
+        for a, b in telluric_intervals:
+            self.gui.telluricmask[(self.gui.xcurrent >= a) & (self.gui.xcurrent <= b)] = 0
+
+        return self.gui.telluricmask, telluric_intervals
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def doppler_shift(self, v_rad):
+        """
+        Calculate the wavelength shift from v_rad
+
+        Parameters
+        ----------
+        v_rad : float
+            The radial velocity (in same units as speed of light).
+
+        Returns
+        -------
+        float
+            The shifted wavelength.
+        """
+        c = 299792.458  # speed of light in km/s
+
+        # Scale factor: sf = lambda_observed/lambda_emitted
+
+        sf = np.sqrt((c + v_rad)/(c - v_rad))
+
+        return sf
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def readfits(self, fitsfile, hduid=0):
+
         self.gui.ax[0].cla()
         self.gui.ax[1].cla()
     
@@ -362,21 +444,28 @@ class start(QObject):
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
 
+
         #self.fit_spline()
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def writefits(self, fitsfile, hduid=0):
-        """ Save normalized spectrum in
-            user fits file
+        """ Save normalized spectrum and mask in
+            fits file
         """
-    
+            
+        export_mask = np.array(np.copy(self.gui.mask),dtype=int)
+        export_mask[export_mask==True] = 1
+        export_mask[export_mask==False] = 2
+        export_mask[self.gui.telluricmask==0] = 0
+
         # Create columns for wavelength (x-axis) and normalized flux (y-axis)
         col1 = fits.Column(name='Wavelength', format='E', array=self.gui.xcurrent)
         col2 = fits.Column(name='Normalized_Flux', format='E', array=self.gui.ynormcurrent)
+        col3 = fits.Column(name='Mask', format='E', array=export_mask)
     
         # Create a ColDefs object from the columns
-        cols = fits.ColDefs([col1, col2])
+        cols = fits.ColDefs([col1, col2, col3])
     
         # Create a BinTableHDU object from the ColDefs object
         tbhdu = fits.BinTableHDU.from_columns(cols)
@@ -433,6 +522,15 @@ class start(QObject):
         if len(yi)>0 and figid==0 and showfit==True:
             self.gui.ax[0].plot(x, yi, color='r', lw=1.5, label='spline fit')
 
+            _, telluric_intervals = self.create_telluric_mask()
+
+            # Fill between each pair of wavelengths in the telluric intervals
+            for start, end in telluric_intervals:
+                ylim_l = np.nanmin(self.gui.ycurrent)
+                ylim_h = np.nanmax(self.gui.ycurrent)
+                yy = np.linspace(ylim_l, ylim_h, 10)
+                self.gui.ax[0].fill_betweenx(yy, start, end, color='red', alpha=0.3, label='telluric bands')
+
         #self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
         self.gui.ax[1].set_xlabel('wavelength [AA]')
 
@@ -440,9 +538,12 @@ class start(QObject):
         if len(self.gui.mask)>0:
             mask_edges=self.find_mask_edges()
             ii=0
-            while ii < len(mask_edges)-2:
+            while ii < len(mask_edges)-1:
                 xx1 = float(x[mask_edges[ii]])
-                xx2 = float(x[mask_edges[ii+1]])
+                if mask_edges[ii+1] < len(x):
+                    xx2 = float(x[mask_edges[ii+1]])
+                else:
+                    xx2 = xx1
                 ii+=2
                 ylim_l=np.nanmin(self.gui.ycurrent)
                 ylim_h=np.nanmax(self.gui.ycurrent)
@@ -482,9 +583,9 @@ class start(QObject):
                 self.gui.xlim_l_last=xlim_l
                 self.gui.xlim_h_last=xlim_h
                 
-                self.gui.mask=np.array([])
+                self.linetable_mask(dofit=False)
                 self.gui.yi=np.array([])
-                
+
             self.apply_mask()
             x, y = self.gui.xcurrent, self.gui.ymaskedcurrent
     
@@ -598,27 +699,32 @@ class start(QObject):
             using rms measured over smoothed spectrum
             iteratively until change in rms is less than 1 percent
         """
-       
+ 
         if len(self.gui.ynormcurrent)>1:
  
             del self.gui.mask
             self.gui.mask=np.array([])
 
+            self.apply_mask()
+
             x = np.copy(self.gui.xcurrent)
             y = np.copy(self.gui.ynormcurrent)
+
+            xfit = x[self.gui.telluricmask != 0]
+            yfit = y[self.gui.telluricmask != 0]
 
             sigma_high=float(self.gui.lineEdit_sigma_high.text())
             sigma_low=float(self.gui.lineEdit_sigma_low.text())        
 
             # do several iterations to improve masks
-            iters=40
+            iters=20
             for i in range(iters):
 
                 # Fit a 3rd degree polynomial to the data during first 2 iterations
                 if i<2:
-                    coefficients = np.polyfit(x, y, 1)
+                    coefficients = np.polyfit(xfit, yfit, 2)
                 else:
-                    coefficients = np.polyfit(x, y, 2) 
+                    coefficients = np.polyfit(xfit, yfit, 3) 
 
                 # Create a polynomial function from the coefficients
                 polynomial = np.poly1d(coefficients)
@@ -635,7 +741,12 @@ class start(QObject):
                 mask_high = masker_high.create_mask()
                 mask_low = masker_low.create_mask()
 
+                mask_high[self.gui.telluricmask==0] = False
+                mask_low[self.gui.telluricmask==0] = False
+
                 new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
+                new_mask = np.array(exp_mask(new_mask, radius=4, keep_mask=True, quiet=True),dtype=bool)
+                new_mask[self.gui.telluricmask==0] = False
 
                 # Masked values are replaced with np.nan
                 y[new_mask==True] = np.nan
@@ -656,42 +767,6 @@ class start(QObject):
             self.fit_spline(showfit=True)
 
 
-    def identify_mask_old(self):
-        """ Identify/mask lines in normed spectrum
-            using rms measured over smoothed spectrum
-            iteratively until change in rms is less than 1 percent
-        """
-       
-        if len(self.gui.ynormcurrent)>1:
- 
-            del self.gui.mask
-            self.gui.mask=np.array([])
-            self.fit_spline()
-
-            y = np.copy(self.gui.ynormcurrent)
-            sigma_high=float(self.gui.lineEdit_sigma_high.text())
-            sigma_low=float(self.gui.lineEdit_sigma_low.text())        
-
-            # do several iterations to improve masks
-            iters=40
-            for i in range(iters):
-                masker_high = PeakMask(y, sigma_smooth=4, sigma_threshold=sigma_high, rms_tolerance=2)
-                masker_low = PeakMask(y, sigma_smooth=4, sigma_threshold=sigma_low, rms_tolerance=2)
- 
-                mask_high = masker_high.create_mask()
-                mask_low = masker_low.create_mask()
-
-                new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
-                
-                if len(new_mask)>0:
-                    self.gui.mask=new_mask
-
-                if i==iters:
-                    self.fit_spline(showfit=True)
-                else:
-                    self.fit_spline(showfit=True)
-
-
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def find_mask_edges(self):
@@ -709,7 +784,7 @@ class start(QObject):
         # Calculate the center and width of each region
         # and write these into the first and second column of the table, respectively
         self.gui.tableWidget.setRowCount(0)
-        self.gui.tableWidget.setRowCount(300)
+        self.gui.tableWidget.setRowCount(1000)
 
         for i in range(0, len(edges), 2):
             try:
@@ -729,7 +804,19 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def apply_mask(self):
-        if len(self.gui.mask)>0:
+
+        self.create_telluric_mask()
+
+        if len(self.gui.mask)>0 and len(self.gui.telluricmask)>0:
+            ymasked = np.copy(self.gui.ycurrent)
+            ymasked[self.gui.mask] = np.nan
+            ymasked[self.gui.telluricmask==0] = np.nan
+            self.gui.ymaskedcurrent = np.array(ymasked)
+        elif len(self.gui.telluricmask)>0:
+            ymasked = np.copy(self.gui.ycurrent)
+            ymasked[self.gui.telluricmask==0] = np.nan
+            self.gui.ymaskedcurrent = np.array(ymasked)
+        elif len(self.gui.mask)>0:
             ymasked = np.copy(self.gui.ycurrent)
             ymasked[self.gui.mask] = np.nan
             self.gui.ymaskedcurrent = np.array(ymasked)
@@ -749,7 +836,7 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def linetable_mask(self):
+    def linetable_mask(self, dofit=True):
         
         """ use the user lines from the table to mask spectral regions
             when doing the continuum normalization
@@ -781,11 +868,16 @@ class start(QObject):
             idx.extend(this_idx)
         if len(idx)>1:
             idx=np.hstack(idx)
+
         idx=np.unique(np.array(idx,dtype=int))
-        self.gui.mask = np.array([False for x in self.gui.xcurrent])
+
+        self.gui.mask = np.array([False for x in self.gui.xcurrent],dtype=bool)
         self.gui.mask[idx] = True
-        
+
         self.fit_spline(showfit=True)
+        self.make_fig(0)
+        self.make_fig(1)
+
 
 #                             RADIAL VELOCITY
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
