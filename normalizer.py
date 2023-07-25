@@ -133,7 +133,8 @@ class start(QObject):
         old_header_horizontal = old_widget.horizontalHeader().saveState()
         old_header_vertical = old_widget.verticalHeader().saveState()
 
-        column_names = [old_widget.horizontalHeaderItem(i).text() for i in range(old_widget.columnCount())]
+        #column_names = [old_widget.horizontalHeaderItem(i).text() for i in range(old_widget.columnCount())]
+        column_names = ["lambda","width"]
 
         min_width = old_widget.minimumWidth()
         max_width = old_widget.maximumWidth()
