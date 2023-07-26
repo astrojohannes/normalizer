@@ -100,7 +100,6 @@ class start(QObject):
         self.gui.lineEdit_auto_velocity_shift.setText('0')
         self.gui.lineEdit_auto_velocity_shift_lim1.setText('-50')
         self.gui.lineEdit_auto_velocity_shift_lim2.setText('50')
-        self.gui.veloshift_current=0.0
         self.gui.rv=0.0
         self.gui.rv_err=0.0
         
@@ -167,6 +166,10 @@ class start(QObject):
         self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
         self.gui.lineEdit_telluric_vrad.setText('0.0')
 
+        # Hide button to apply velo shift
+        self.gui.pushButton_shift_spectrum.setVisible(False)
+
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
         
@@ -182,7 +185,6 @@ class start(QObject):
         self.gui.ynormcurrent=self.gui.ynorm
         self.gui.yi=np.array([])
         self.gui.mask=np.array([])
-        self.gui.veloshift_current=0.0
 
         self.gui.ax[0].set_xlim([min(self.gui.x),max(self.gui.x)])        
         self.gui.ax[1].set_xlim([min(self.gui.x),max(self.gui.x)])        
@@ -440,7 +442,6 @@ class start(QObject):
         self.gui.ynorm = np.array([])
         self.gui.ynormcurrent = np.array([])
         self.gui.yi = np.array([])
-        self.gui.veloshift_current = 0.0
    
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
@@ -893,6 +894,77 @@ class start(QObject):
         return data.view(np.recarray)
 
     def determine_rad_velocity(self):
+        from PyAstronomy import pyasl
+        c = 300000.0  # speed of light in km/s
+
+        if len(self.gui.ynormcurrent)>0:
+            waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
+        else:
+            self.gui.rv=0.0
+            self.gui.lineEdit_auto_velocity_shift.setText('0')
+            return
+
+        err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
+        this_arr=np.vstack((waveobs,flux,err))
+        this_spec=np.core.records.fromrecords(this_arr.T, names='waveobs,flux,err')
+        this_spec=this_spec.view(np.recarray)
+
+        # Check and interpolate missing data for this_spec
+        mask = np.isfinite(this_spec.flux)
+        this_spec.flux = np.interp(this_spec.waveobs, this_spec.waveobs[mask], this_spec.flux[mask])
+
+        #--- Radial Velocity determination with template -------------------------------
+        template = self.read_template("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+        template['waveobs']=template['waveobs']*10.0    # convert to Angstroem
+
+        # Check and interpolate missing data for template
+        mask = np.isfinite(template.flux)
+        template.flux = np.interp(template.waveobs, template.waveobs[mask], template.flux[mask])
+
+        # Template
+        tw = template.waveobs 
+        tf = template.flux
+
+        # Data
+        dw = this_spec.waveobs
+        df = this_spec.flux
+
+        # Plot template and data
+        """
+        fig = plt.figure()
+        plt.title("Template (blue) and data (red)")
+        plt.plot(tw, tf, 'b.-')
+        plt.plot(dw, df, 'r.-')
+        plt.show()
+        """
+
+        # Carry out the cross-correlation.
+        # The RV-range is -30 - +30 km/s in steps of 0.5 km/s.
+        rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, -300., 300., 1.0, skipedge=0)
+
+        # Find the index of maximum cross-correlation function
+        maxind = np.argmax(cc)
+
+        # Convert the radial velocity shift to a shift in wavelength.
+        # Assume a mean wavelength for the conversion. 
+        mean_wavelength = np.mean(dw)  # or any specific wavelength you are interested in
+        rw = mean_wavelength * (rv / c)
+
+        print("Cross-correlation function is maximized at dRV = ", rv[maxind], " km/s")
+        print("Cross-correlation function is maximized at dRV = ", rw[maxind], " AA")
+ 
+        if rv[maxind] > 0.0:
+            print("  A red-shift with respect to the template")
+        else:
+            print("  A blue-shift with respect to the template")
+
+        fig = plt.figure()
+        plt.plot(rw, cc, 'bp-')
+        plt.plot(rw[maxind], cc[maxind], 'ro')
+        plt.show()
+        
+
+    def determine_rad_velocity_old(self):
         if len(self.gui.ynormcurrent)>0:
             waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
         else:
@@ -938,6 +1010,8 @@ class start(QObject):
         # cross-correlate the resampled spectra
         xcorr = correlate(this_spec_flux_common, template_flux_common)
 
+        #print(xcorr)
+
         # Create an array of relative shifts
         shifts = np.arange(len(xcorr)) - len(this_spec.flux) + 1
 
@@ -955,6 +1029,8 @@ class start(QObject):
         else:
             rv_new=0
             self.gui.lineEdit_auto_velocity_shift.setText('0')
+
+        print(rv_new)
 
 
     def apply_velocity_shift(self,rv_new=0.0):
