@@ -644,7 +644,6 @@ class start(QObject):
             else:
                 offs = float(self.gui.lineEdit_offset.text())
             
- 
             ynorm = np.divide(np.array(self.gui.ycurrent) + offs, np.array(yi), where=np.array(yi) != 0)
     
             self.gui.yi = np.array(yi)
