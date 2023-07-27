@@ -446,7 +446,6 @@ class start(QObject):
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
 
-
         #self.fit_spline()
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -513,7 +512,7 @@ class start(QObject):
         col=['b','g']
 
         self.gui.ax[figid].step(x, y,color=col[figid],lw=0.8)
-        
+
         if figid==0:
             self.gui.ax[0].text(0.03,0.9,'Original',fontsize=20,transform=self.gui.ax[0].transAxes)
         elif figid==1:
@@ -646,6 +645,10 @@ class start(QObject):
             if not len(self.gui.ynorm)>0:
                 self.gui.ynorm = ynorm
             self.gui.ynormcurrent = ynorm
+
+            # add offset to fit
+            if self.gui.lineEdit_offset.text() != '':
+                self.gui.ynormcurrent += float(self.gui.lineEdit_offset.text())
     
             self.make_fig(0,showfit=showfit)
             self.make_fig(1,showfit=showfit)

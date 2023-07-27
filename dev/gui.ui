@@ -50,7 +50,7 @@
       <x>10</x>
       <y>6</y>
       <width>871</width>
-      <height>905</height>
+      <height>949</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -296,6 +296,33 @@
            </item>
            <item>
             <widget class="QLineEdit" name="lineEdit_fixpoints">
+             <property name="minimumSize">
+              <size>
+               <width>110</width>
+               <height>0</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>110</width>
+               <height>16777215</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_16">
+           <item>
+            <widget class="QLabel" name="label_13">
+             <property name="text">
+              <string>Offset</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLineEdit" name="lineEdit_offset">
              <property name="minimumSize">
               <size>
                <width>110</width>
