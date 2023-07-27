@@ -638,18 +638,20 @@ class start(QObject):
                 spl = self.gui.method(x, y, k=k, w=w)
                 spl.set_smoothing_factor(s)
                 yi=np.copy(spl(x)).flatten()
-    
-            ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
+   
+            if self.gui.lineEdit_offset.text().strip()=='':
+                offs = 0.0
+            else:
+                offs = float(self.gui.lineEdit_offset.text())
+            
+ 
+            ynorm = np.divide(np.array(self.gui.ycurrent) + offs, np.array(yi), where=np.array(yi) != 0)
     
             self.gui.yi = np.array(yi)
             if not len(self.gui.ynorm)>0:
                 self.gui.ynorm = ynorm
             self.gui.ynormcurrent = ynorm
 
-            # add offset to fit
-            if self.gui.lineEdit_offset.text() != '':
-                self.gui.ynormcurrent += float(self.gui.lineEdit_offset.text())
-    
             self.make_fig(0,showfit=showfit)
             self.make_fig(1,showfit=showfit)
 
