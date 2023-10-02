@@ -398,9 +398,36 @@ class start(QObject):
                     break
             # Load binary table data if it exists
             if binary_table_hdu is not None:
-                x = binary_table_hdu.data['Wavelength']
-                y = binary_table_hdu.data['Normalized_Flux']
-                hdr = binary_table_hdu.header
+                available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
+                
+                # Check if 'Wavelength' and 'Normalized_Flux' columns are available
+                if 'Wavelength' in available_cols and 'Normalized_Flux' in available_cols:
+                    x = binary_table_hdu.data['Wavelength'].ravel()
+                    y = binary_table_hdu.data['Normalized_Flux'].ravel()
+                    hdr = binary_table_hdu.header
+                else:
+                    print("The expected columns 'Wavelength' and/or 'Normalized_Flux' are not available.")
+                    print("Available columns are: ", available_cols)
+                    
+                    # Let user select columns
+                    x_col = input("Please enter the column name to use as Wavelength: ")
+                    while x_col not in available_cols:
+                        print(f"{x_col} is not a valid column name. Please enter a valid column name for Wavelength: ")
+                        x_col = input()
+                    
+                    y_col = input("Please enter the column name to use as Normalized_Flux: ")
+                    while y_col not in available_cols or y_col == x_col:
+                        if y_col == x_col:
+                            print(f"{y_col} is already used as Wavelength. Please enter a different column name for Normalized_Flux: ")
+                        else:
+                            print(f"{y_col} is not a valid column name. Please enter a valid column name for Normalized_Flux: ")
+                        y_col = input()
+                    
+                    x = binary_table_hdu.data[x_col].ravel()
+                    y = binary_table_hdu.data[y_col].ravel()
+                    hdr = binary_table_hdu.header
+
+
             else:
                 # Otherwise, assume a regular FITS file and load image data
                 hdr = hdus[hduid].header
@@ -635,7 +662,7 @@ class start(QObject):
             else:
                 # UnivariateSpline
                 # do the fit
-                spl = self.gui.method(x, y, k=k, w=w)
+                spl = self.gui.method(x, y, k=k, w=w, s=200)
                 spl.set_smoothing_factor(s)
                 yi=np.copy(spl(x)).flatten()
    
