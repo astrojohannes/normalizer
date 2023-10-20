@@ -970,8 +970,8 @@ class start(QObject):
         """
 
         # Carry out the cross-correlation.
-        # The RV-range is -30 - +30 km/s in steps of 0.5 km/s.
-        rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, -300., 300., 1.0, skipedge=0)
+        # The RV-range is -300 - +300 km/s in steps of 0.1 km/s.
+        rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, -300., 300., 0.1, skipedge=0)
 
         # Find the index of maximum cross-correlation function
         maxind = np.argmax(cc)
@@ -989,80 +989,13 @@ class start(QObject):
         else:
             print("  A blue-shift with respect to the template")
 
-        fig = plt.figure()
-        plt.plot(rw, cc, 'bp-')
-        plt.plot(rw[maxind], cc[maxind], 'ro')
+        fig = plt.figure(figsize=(10,6))
+        plt.plot(rw, cc/np.nanmax(cc), 'bp-')
+        plt.plot(rw[maxind], cc[maxind]/np.nanmax(cc), 'ro')
+        plt.text(rw[maxind]+0.1,cc[maxind]/np.nanmax(cc),"R$_V$="+str(round(rv[maxind],3))+" km s$^{-1}$")
+        plt.xlabel('R$_V$ [Å]')
+        plt.tight_layout()
         plt.show()
-        
-
-    def determine_rad_velocity_old(self):
-        if len(self.gui.ynormcurrent)>0:
-            waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
-        else:
-            self.gui.rv=0.0
-            self.gui.lineEdit_auto_velocity_shift.setText('0')
-            return
-
-        err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
-        this_arr=np.vstack((waveobs,flux,err))
-        this_spec=np.core.records.fromrecords(this_arr.T, names='waveobs,flux,err')
-        this_spec=this_spec.view(np.recarray)
-
-        # Check and interpolate missing data for this_spec
-        mask = np.isfinite(this_spec.flux)
-        this_spec.flux = np.interp(this_spec.waveobs, this_spec.waveobs[mask], this_spec.flux[mask])
-
-        #--- Radial Velocity determination with template -------------------------------
-        template = self.read_template("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-        template['waveobs']=template['waveobs']*10.0    # convert to Angstroem
-
-        # Check and interpolate missing data for template
-        mask = np.isfinite(template.flux)
-        template.flux = np.interp(template.waveobs, template.waveobs[mask], template.flux[mask])
-
-        # Find the overlapping wavelength range
-        start = max(np.min(this_spec.waveobs), np.min(template.waveobs))
-        stop = min(np.max(this_spec.waveobs), np.max(template.waveobs))
-
-        # Find the smallest step size
-        step = min(this_spec.waveobs[1]-this_spec.waveobs[0], template.waveobs[1]-template.waveobs[0])
-
-        # Create the common wavelength grid
-        common_waveobs = np.arange(start, stop, step)
-
-        # Create interpolation functions for the spectra
-        interp_this_spec_flux = interp1d(this_spec.waveobs, this_spec.flux, bounds_error=False, fill_value=0)
-        interp_template_flux = interp1d(template.waveobs, template.flux, bounds_error=False, fill_value=0)
-
-        # Interpolate the spectra onto the common wavelength grid
-        this_spec_flux_common = interp_this_spec_flux(common_waveobs)
-        template_flux_common = interp_template_flux(common_waveobs)
-
-        # cross-correlate the resampled spectra
-        xcorr = correlate(this_spec_flux_common, template_flux_common)
-
-        #print(xcorr)
-
-        # Create an array of relative shifts
-        shifts = np.arange(len(xcorr)) - len(this_spec.flux) + 1
-
-        # Check and interpolate missing data for xcorr
-        mask = np.isfinite(xcorr)
-        xcorr = np.interp(shifts, shifts[mask], xcorr[mask])
-
-        # Fit a Gaussian to the peak to find the precise location
-        popt, pcov = curve_fit(self.gaussian, shifts, xcorr, p0=[1, 0, 10])
-
-        # The velocity shift is then the 'b' parameter from our fit
-        if abs(popt[1])<50:
-            rv_new = popt[1]
-            self.gui.lineEdit_auto_velocity_shift.setText(str(np.round(rv_new, 2)))
-        else:
-            rv_new=0
-            self.gui.lineEdit_auto_velocity_shift.setText('0')
-
-        print(rv_new)
-
 
     def apply_velocity_shift(self,rv_new=0.0):
         
