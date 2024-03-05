@@ -217,7 +217,7 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
        <property name="spacing">
-        <number>3</number>
+        <number>4</number>
        </property>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_14">
@@ -868,7 +868,7 @@
        <property name="font">
         <font>
          <family>Verdana</family>
-         <pointsize>13</pointsize>
+         <pointsize>11</pointsize>
         </font>
        </property>
        <property name="mouseTracking">
@@ -2937,7 +2937,8 @@
         </property>
         <property name="font">
          <font>
-          <pointsize>12</pointsize>
+          <family>Verdana</family>
+          <pointsize>11</pointsize>
          </font>
         </property>
        </column>
@@ -2947,10 +2948,18 @@
         </property>
         <property name="font">
          <font>
-          <pointsize>12</pointsize>
+          <family>Verdana</family>
+          <pointsize>11</pointsize>
          </font>
         </property>
        </column>
+       <item row="0" column="0">
+        <property name="font">
+         <font>
+          <family>Verdana</family>
+         </font>
+        </property>
+       </item>
       </widget>
      </item>
      <item>

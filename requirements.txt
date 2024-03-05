@@ -1,8 +1,8 @@
 astropy==5.2.2
-matplotlib==3.7.1
-numpy==1.24.3
+matplotlib==3.7.4
+numpy==1.24.4
 pandas==1.5.3
-PyAstronomy==0.19.0
-PyQt5==5.15.9
+PyAstronomy==0.21.0
+PyQt5==5.15.10
 PyQt5_sip==12.11.1
-SciPy==1.8.1
+SciPy==1.10.1

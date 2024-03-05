@@ -90,11 +90,11 @@ if __name__ == "__main__":
         norm.gui.lbl_fname.setText(spectrum_file)
         norm.make_fig(0)
         norm.zoom_fig(wave_min,wave_max)
-        norm.fit_spline()
+        #norm.fit_spline()
     elif not spectrum_file == None:
         norm.readfits(spectrum_file)
         norm.gui.lbl_fname.setText(spectrum_file)
         norm.make_fig(0)
-        norm.fit_spline()
+        #norm.fit_spline()
     sys.exit(app.exec_())
 

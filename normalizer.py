@@ -12,14 +12,19 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os,sys
+import warnings
 import ast
 
 mpl.rcParams['text.usetex'] = False
 
+import astropy
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy.modeling import models, fitting
+from astropy.utils.exceptions import AstropyWarning
+
+from PyAstronomy import pyasl
 
 from scipy.interpolate import UnivariateSpline, InterpolatedUnivariateSpline, LSQUnivariateSpline, interp1d
 from scipy.signal import correlate
@@ -82,7 +87,7 @@ class start(QObject):
         self.gui.method=UnivariateSpline
         
         self.gui.lineEdit_degree.setText('3')
-        self.gui.lineEdit_smooth.setText('20')
+        self.gui.lineEdit_smooth.setText('200')
         self.gui.lineEdit_sigma_high.setText('3.0')
         self.gui.lineEdit_sigma_low.setText('2.0')
         self.gui.lineEdit_fixed_width.setText('10')
@@ -210,6 +215,10 @@ class start(QObject):
 
         filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("(*.fits)"))
  
+        if filename == '':
+            # cancel was clicked
+            return
+
         if mydir == QDir.currentPath():
             self.gui.lbl_fname.setText(os.path.basename(filename))
         else:
@@ -419,7 +428,21 @@ class start(QObject):
                 # Otherwise, assume a regular FITS file and load image data
                 hdr = hdus[hduid].header
                 img = hdus[hduid].data
+
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    warnings.simplefilter('always', AstropyWarning)  # Change 'always' to 'error' to turn warnings into exceptions
+
+                    wcs = WCS(hdr)
+
+                    # Check if any relevant warnings were caught
+                    for warning in caught_warnings:
+                        if isinstance(warning.message, astropy.wcs.FITSFixedWarning):
+                            print("Caught an astropy WCS warning. Trying to fix header now.")
+                            hdr = self.clean_wcs_for_1d_fits_header(fitsfile)
+
+                # Recreate the WCS object with the potentially updated header
                 wcs = WCS(hdr)
+
                 if int(hdr['NAXIS']) == 2:
                     y = img.sum(axis=0)   # summing up along spatial direction
                     x = wcs.all_pix2world([(x, 0) for x in range(len(y))], 0)
@@ -432,6 +455,7 @@ class start(QObject):
                     crval1 = hdr['CRVAL1']  # Coordinate value at reference point
                     cdelt1 = hdr['CDELT1']  # Coordinate increment at reference point
                     x = crval1 + cdelt1 * (np.arange(len(y)) - (crpix1 - 1))
+
         else:
             # Otherwise, assume the input file is an ASCII file and read it using numpy
             if fitsfile.lower().endswith('.csv'):
@@ -442,9 +466,14 @@ class start(QObject):
             x = data[:, 0]
             y = data[:, 1]
             hdr = fits.Header()
-   
+
         # detect spikes at edges
-        start, end = self.remove_spikes(y)
+        #start, end = self.remove_spikes(y)
+
+        # check for constant flux at edges and truncate
+        _, start_idx, end_idx = self.truncate_constant_edges(y, 5)
+        x = x[start_idx:end_idx]
+        y = y[start_idx:end_idx]
 
         # Save re-usable quantities in global variables
         self.gui.x = x
@@ -461,6 +490,36 @@ class start(QObject):
         self.gui.xlim_l_last=0
 
         #self.fit_spline()
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    # Define function to clean WCS keywords for 1D data and return the updated header
+    def clean_wcs_for_1d_fits_header(self,fits_file):
+        # Open the FITS file
+        with fits.open(fits_file) as hdul:
+            header = hdul[0].header  # Assuming the primary header contains the WCS info
+        
+            # Check if the data is 1-dimensional
+            if hdul[0].data.ndim == 1:
+                print(f"Data in {fits_file} is 1-dimensional, but header suggests otherwise!")
+            
+                # List of WCS keywords that are irrelevant for 1D data
+                wcs_keywords_2d_3d = ['CRPIX2', 'CRPIX3', 'CDELT2', 'CDELT3',
+                                  'CRVAL2', 'CRVAL3', 'CTYPE2', 'CTYPE3',
+                                  'CUNIT2', 'CUNIT3', 'CROTA2', 'CROTA3',
+                                  'PC2_', 'PC3_', 'CD2_', 'CD3_', 'PV2_', 'PV3_']
+            
+                # Create a copy of the header before modification
+                updated_header = header.copy()
+            
+                # Remove the irrelevant WCS keywords from the copy
+                for key in wcs_keywords_2d_3d:
+                    # Check each pattern and remove if present
+                    for k in list(updated_header.keys()):
+                        if k.startswith(key):
+                            del updated_header[k]
+                        
+            return updated_header
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -507,8 +566,8 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def make_fig(self, figid, showfit=True):
-        """ make the 2-panel matplotlib figure """
-
+      """ make the 2-panel matplotlib figure """
+      if len(self.gui.xcurrent)>0:
         fig = self.gui.fig
         ax = self.gui.ax
 
@@ -621,7 +680,7 @@ class start(QObject):
                 wu=np.array([float(a) for a in wu],dtype=float)
                 for fp in wu:
                     w[self.find_nearest_idx(x,fp)]=1e10
-            
+
             if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
                 
                 # knot points where the polynomials connect
@@ -644,19 +703,23 @@ class start(QObject):
             else:
                 # UnivariateSpline
                 # do the fit
-                spl = self.gui.method(x, y, k=k, w=w, s=200)
+                # UnivariateSpline was found to have problems with large numeric y-values, so we down-scale to the mean
+                scalingfactor = np.nanmean(y)
+                if scalingfactor < 1000:
+                    scalingfactor = 1.0
+                spl = self.gui.method(x, y/scalingfactor, k=k, w=w, s=s)
                 spl.set_smoothing_factor(s)
-                yi=np.copy(spl(x)).flatten()
+                yi=scalingfactor*np.copy(spl(x)).flatten()
    
             if self.gui.lineEdit_offset.text().strip()=='':
                 offs = 0.0
             else:
                 offs = float(self.gui.lineEdit_offset.text())
-            
+
             ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
 
             ynorm *= offs
-    
+   
             self.gui.yi = np.array(yi)
             if not len(self.gui.ynorm)>0:
                 self.gui.ynorm = ynorm
@@ -664,6 +727,44 @@ class start(QObject):
 
             self.make_fig(0,showfit=showfit)
             self.make_fig(1,showfit=showfit)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def truncate_constant_edges(self, arr, min_repeat=10):
+        # Convert to a numpy array for easier handling
+        arr = np.array(arr)
+    
+        # Initialize variables to store the length of constant sequences at start and end
+        start_constant_length = 0
+        end_constant_length = 0
+    
+        # Function to compare considering NaN values
+        def equals_handling_nan(a, b):
+            return (a == b) | (np.isnan(a) & np.isnan(b))
+
+        # Check for constant values at the start of the array
+        for i in range(1, len(arr)):
+            if equals_handling_nan(arr[i], arr[0]):
+                start_constant_length = i
+            else:
+                break  # Stop at the first non-constant value
+
+        # Update start index if there are more than min_repeat constant values at the start
+        start_index = start_constant_length + 1 if start_constant_length >= min_repeat else 0
+    
+        # Check for constant values at the end of the array
+        for i in range(len(arr) - 2, -1, -1):
+            if equals_handling_nan(arr[i], arr[-1]):
+                end_constant_length = (len(arr) - i - 1)
+            else:
+                break  # Stop at the first non-constant value
+
+        # Update end index if there are more than min_repeat constant values at the end
+        end_index = len(arr) - (end_constant_length + 1) if end_constant_length >= min_repeat else len(arr)
+    
+        # Return the truncated array based on the found indices
+        return arr[start_index:end_index], start_index, end_index
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -734,7 +835,7 @@ class start(QObject):
             sigma_low=float(self.gui.lineEdit_sigma_low.text())        
 
             # do several iterations to improve masks
-            iters=20
+            iters=40
             new_mask=np.array([True for x in yfit])
             for i in range(iters):
 
@@ -899,8 +1000,11 @@ class start(QObject):
         for row in range(table.rowCount()):
             l = table.item(row, 0)
             w = table.item(row, 1)
-            c = float(l.text().strip()) if (l is not None) and (l.text().strip() != '') else np.nan
-            w = float(w.text().strip()) if (w is not None) and (w.text().strip() != '') else np.nan
+            try:
+                c = float(l.text().strip()) if (l is not None) and (l.text().strip() != '') else np.nan
+                w = float(w.text().strip()) if (w is not None) and (w.text().strip() != '') else np.nan
+            except:
+                c = np.nan
             if c != np.nan and c>0 and w != np.nan and w>0:
                 lines.append(c)
                 widths.append(w)
@@ -939,7 +1043,6 @@ class start(QObject):
         return data.view(np.recarray)
 
     def determine_rad_velocity(self):
-        from PyAstronomy import pyasl
         c = 300000.0  # speed of light in km/s
 
         if len(self.gui.ynormcurrent)>0:
