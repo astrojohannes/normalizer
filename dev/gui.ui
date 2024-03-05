@@ -14,7 +14,7 @@
     <x>0</x>
     <y>0</y>
     <width>660</width>
-    <height>780</height>
+    <height>880</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -26,18 +26,18 @@
   <property name="minimumSize">
    <size>
     <width>660</width>
-    <height>780</height>
+    <height>782</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>660</width>
-    <height>780</height>
+    <height>880</height>
    </size>
   </property>
   <property name="font">
    <font>
-    <pointsize>12</pointsize>
+    <family>Verdana</family>
    </font>
   </property>
   <property name="windowTitle">
@@ -127,6 +127,7 @@
       <widget class="QLabel" name="lbl_fname2">
        <property name="font">
         <font>
+         <family>Verdana</family>
          <pointsize>11</pointsize>
         </font>
        </property>
@@ -173,6 +174,7 @@
       <widget class="QLabel" name="lbl_fname">
        <property name="font">
         <font>
+         <family>Verdana</family>
          <pointsize>11</pointsize>
         </font>
        </property>
@@ -191,11 +193,14 @@
      <rect>
       <x>20</x>
       <y>70</y>
-      <width>621</width>
-      <height>661</height>
+      <width>628</width>
+      <height>749</height>
      </rect>
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout_main">
+     <property name="spacing">
+      <number>3</number>
+     </property>
      <item>
       <spacer name="horizontalSpacer_3">
        <property name="orientation">
@@ -211,8 +216,14 @@
      </item>
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
+       <property name="spacing">
+        <number>3</number>
+       </property>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_14">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_10">
            <property name="text">
@@ -246,6 +257,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_15">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_12">
            <property name="text">
@@ -286,6 +300,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_5">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_6">
            <property name="text">
@@ -323,6 +340,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label">
            <property name="text">
@@ -356,6 +376,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_2">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_2">
            <property name="text">
@@ -389,6 +412,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_10">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_8">
            <property name="text">
@@ -425,6 +451,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_11">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_9">
            <property name="text">
@@ -458,6 +487,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_16">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_13">
            <property name="text">
@@ -490,7 +522,11 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_3"/>
+        <layout class="QHBoxLayout" name="horizontalLayout_3">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+        </layout>
        </item>
        <item>
         <widget class="QPushButton" name="pushButton_normalize">
@@ -520,6 +556,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_7">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_7">
            <property name="text">
@@ -589,6 +628,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_4">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_4">
            <property name="enabled">
@@ -648,6 +690,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_13">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QLabel" name="label_11">
            <property name="text">
@@ -691,6 +736,9 @@
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_12">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <widget class="QPushButton" name="pushButton_determine_rad_velocity">
            <property name="sizePolicy">
@@ -781,6 +829,19 @@
           <enum>Qt::Horizontal</enum>
          </property>
         </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </item>

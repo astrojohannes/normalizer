@@ -123,6 +123,7 @@ class start(QObject):
 
         # Hide button to apply velo shift
         self.gui.pushButton_shift_spectrum.setVisible(False)
+        self.gui.lineEdit_auto_velocity_shift.setVisible(False)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -195,7 +196,7 @@ class start(QObject):
         else:
             mydir = QDir.currentPath()
 
-        filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("Spectrum (*.fits)"))
+        filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("(*.fits)"))
  
         if mydir == QDir.currentPath():
             self.gui.lbl_fname.setText(os.path.basename(filename))
@@ -219,6 +220,13 @@ class start(QObject):
         filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'_'+str(int(self.gui.xlim_h_last))+'.fits'
         self.gui.lbl_fname2.setText(filename)
         self.writefits(filename)
+
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def zoom_fig(self,wave_min,wave_max):
+        self.gui.ax[0].set_xlim([wave_min,wave_max])
+        #self.gui.ax[1].set_xlim()
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -821,20 +829,23 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def apply_mask(self):
+    def apply_mask_old(self):
 
         self.create_telluric_mask()
 
         if len(self.gui.mask)>0 and len(self.gui.telluricmask)>0:
+            print('case a')
             ymasked = np.copy(self.gui.ycurrent)
             ymasked[self.gui.mask] = np.nan
             ymasked[self.gui.telluricmask==0] = np.nan
             self.gui.ymaskedcurrent = np.array(ymasked)
         elif len(self.gui.telluricmask)>0:
+            print('case b')
             ymasked = np.copy(self.gui.ycurrent)
             ymasked[self.gui.telluricmask==0] = np.nan
             self.gui.ymaskedcurrent = np.array(ymasked)
         elif len(self.gui.mask)>0:
+            print('case c')
             ymasked = np.copy(self.gui.ycurrent)
             ymasked[self.gui.mask] = np.nan
             self.gui.ymaskedcurrent = np.array(ymasked)
@@ -844,6 +855,38 @@ class start(QObject):
         nans, x= self.nan_helper(self.gui.ymaskedcurrent)
         if np.any(~nans):
             self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
+
+    def apply_mask(self):
+
+        self.create_telluric_mask()
+
+        # Backup original masks
+        original_mask = np.copy(self.gui.mask) if len(self.gui.mask) > 0 else None
+        original_telluric_mask = np.copy(self.gui.telluricmask) if len(self.gui.telluricmask) > 0 else None
+
+        # Apply initial masks to the data
+        if original_mask is not None or original_telluric_mask is not None:
+            ymasked = np.copy(self.gui.ycurrent)
+            if original_mask is not None:
+                ymasked[original_mask] = np.nan
+            if original_telluric_mask is not None:
+                ymasked[original_telluric_mask == 0] = np.nan
+            self.gui.ymaskedcurrent = np.array(ymasked)
+        else:
+            self.gui.ymaskedcurrent = np.copy(self.gui.ycurrent)
+
+        # Helper for nan handling in interpolation
+        nans, x= self.nan_helper(self.gui.ymaskedcurrent)
+        if np.any(~nans):
+            self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
+
+        # Reapply masks after interpolation
+        if original_mask is not None:
+            self.gui.ymaskedcurrent[original_mask] = np.nan
+        if original_telluric_mask is not None:
+            self.gui.ymaskedcurrent[original_telluric_mask == 0] = np.nan
+
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 

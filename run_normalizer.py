@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#from PySide2 import QtCore, QtWidgets
 from PyQt5 import QtCore, QtWidgets
 import sys,os
 import normalizer as n
