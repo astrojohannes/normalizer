@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout
 from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication
-from PyQt5.QtGui import QIcon, QPixmap, QWindow
 from PyQt5.uic import loadUi
 
 import numpy as np
@@ -12,7 +11,6 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.backend_bases import NavigationToolbar2
 import os,sys
 import ast
 
@@ -30,6 +28,7 @@ from scipy.stats import norm
 
 from mask_peaks import PeakMask
 from exp_mask import exp_mask
+from plotwindow import PlotWindow
 
 class TableWidget(QTableWidget):
     def __init__(self, *args, **kwargs):
@@ -69,34 +68,25 @@ class start(QObject):
         self.gui.label_4.setHidden(True)
         self.gui.lineEdit_fixed_width.setHidden(True)
         
-        self.gui.setGeometry(0, 0, 700, 815)        
         self.gui.show()
 
         # figure with 2 subplots
-        fig, ax = plt.subplots(2, 1, sharex = True)
-        mngr = plt.get_current_fig_manager()
-        geom = mngr.window.geometry()
-        x,y,dx,dy = geom.getRect()
-        # put window into the upper left corner for example:
-        mngr.window.setGeometry(701, 0, dx, dy)
-        fig.set_size_inches(8, 8)
-        
-        self.gui.fig = fig
-        self.gui.ax = ax
-        plt.ion()
-        
-        home = NavigationToolbar2.home
-        NavigationToolbar2.home = self.new_home
+        self.plotwindow = PlotWindow()
+        self.plotwindow.custom_toolbar.slicePressed.connect(self.on_slice_pressed)
+        self.plotwindow.custom_toolbar.homePressed.connect(self.on_home_pressed)
+        self.gui.fig = self.plotwindow.figure  # Use the Figure from PlotWindow 
+        self.gui.ax = self.plotwindow.ax  # Use the Axes from PlotWindow
 
         # set standard values
         self.gui.method=UnivariateSpline
         
         self.gui.lineEdit_degree.setText('3')
         self.gui.lineEdit_smooth.setText('20')
-        self.gui.lineEdit_sigma_high.setText('1.5')
-        self.gui.lineEdit_sigma_low.setText('1.0')
+        self.gui.lineEdit_sigma_high.setText('3.0')
+        self.gui.lineEdit_sigma_low.setText('2.0')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
+        self.gui.lineEdit_offset.setText('1.0')
         self.gui.lineEdit_auto_velocity_shift.setText('0')
         self.gui.lineEdit_auto_velocity_shift_lim1.setText('-50')
         self.gui.lineEdit_auto_velocity_shift_lim2.setText('50')
@@ -112,7 +102,6 @@ class start(QObject):
         self.gui.yi=np.array([])    # smoothed, masked and interpolated spectrum used for normalisation (continuum fitting)
         self.gui.ynorm=np.array([]) # normalized array
         
-        
         self.gui.xcurrent=np.array([])
         self.gui.ycurrent=np.array([])    # figure 0
         self.gui.ynormcurrent=np.array([])    # figure 1
@@ -124,42 +113,8 @@ class start(QObject):
         self.gui.xlim_l_last=0
         self.gui.xlim_h_last=0
 
-        # Identify the layout that contains the tableWidget
-        layout = self.gui.horizontalLayout_6
-
-        # Store properties of old table widget that you want to copy
-        old_widget = self.gui.tableWidget
-        old_header_horizontal = old_widget.horizontalHeader().saveState()
-        old_header_vertical = old_widget.verticalHeader().saveState()
-
-        #column_names = [old_widget.horizontalHeaderItem(i).text() for i in range(old_widget.columnCount())]
-        column_names = ["lambda","width"]
-
-        min_width = old_widget.minimumWidth()
-        max_width = old_widget.maximumWidth()
-        min_height = old_widget.minimumHeight()
-        max_height = old_widget.maximumHeight()
-
-        # Remove the existing tableWidget
-        layout.removeWidget(self.gui.tableWidget)
-        self.gui.tableWidget.deleteLater()
-
-        # Create a new instance of TableWidget and add it to the layout
-        self.gui.tableWidget = TableWidget(1000, 2, self.gui)
-        layout.addWidget(self.gui.tableWidget)
-
-        # Restore properties on the new widget
-        self.gui.tableWidget.horizontalHeader().restoreState(old_header_horizontal)
-        self.gui.tableWidget.verticalHeader().restoreState(old_header_vertical)
-
-        # Set column names
-        self.gui.tableWidget.setHorizontalHeaderLabels(column_names)
-
-        # Set minimum and maximum width and height
-        self.gui.tableWidget.setMinimumWidth(min_width)
-        self.gui.tableWidget.setMaximumWidth(max_width)
-        self.gui.tableWidget.setMinimumHeight(min_height)
-        self.gui.tableWidget.setMaximumHeight(max_height)
+        # Identify the layout that contains the main parts, including the tableWidget
+        layout = self.gui.horizontalLayout_main
 
         # Standard telluric absorption bands
         telluric_intervals = self.find_telluric_intervals("skycalc_molec_abs.txt")
@@ -169,11 +124,29 @@ class start(QObject):
         # Hide button to apply velo shift
         self.gui.pushButton_shift_spectrum.setVisible(False)
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def on_slice_pressed(self):
+        xlim_l=float(self.gui.ax[0].get_xlim()[0])
+        xlim_h=float(self.gui.ax[0].get_xlim()[1])
+
+        # user has zoomed in
+        if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
+            self.gui.xcurrent=self.gui.x[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
+            self.gui.ycurrent=self.gui.y[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
+
+            self.gui.xlim_l_last=xlim_l
+            self.gui.xlim_h_last=xlim_h
+                
+            self.linetable_mask(dofit=False)
+            self.gui.yi=np.array([])
+
+        self.fit_spline(showfit=True)
+ 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
         
-    def new_home(self, *args, **kwargs):
+    def on_home_pressed(self, *args, **kwargs):
         
         """ add some functionality to matplotlib's home button
         
@@ -192,7 +165,7 @@ class start(QObject):
         self.gui.xlim_h_last=max(self.gui.x)
         self.gui.xlim_l_last=min(self.gui.x)
 
-        self.fit_spline(showfit=False)
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -232,12 +205,6 @@ class start(QObject):
         self.readfits(filename)
         self.make_fig(0)
 
-# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-
-    def zoom_fig(self,wave_min,wave_max):
-        self.gui.ax[0].set_xlim([wave_min,wave_max])
-        #self.gui.ax[1].set_xlim()
-  
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def saveFile(self):
@@ -481,11 +448,17 @@ class start(QObject):
         """ Save normalized spectrum and mask in
             fits file
         """
-            
+
+     
         export_mask = np.array(np.copy(self.gui.mask),dtype=int)
         export_mask[export_mask==True] = 1
         export_mask[export_mask==False] = 2
-        export_mask[self.gui.telluricmask==0] = 0
+
+        if export_mask.shape[0] == 0:
+            print("No user mask found.")
+            export_mask = self.gui.telluricmask
+        else:
+            export_mask[self.gui.telluricmask==0] = 0
 
         # Create columns for wavelength (x-axis) and normalized flux (y-axis)
         col1 = fits.Column(name='Wavelength', format='E', array=self.gui.xcurrent)
@@ -513,55 +486,48 @@ class start(QObject):
 #                                  PLOTTING
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def make_fig(self,figid,showfit=True):
-        
-        """ make the 2-panel matplotlib figure
-        """
-        
-        plt.ion()
+    def make_fig(self, figid, showfit=True):
+        """ make the 2-panel matplotlib figure """
+
         fig = self.gui.fig
-        plt.subplots_adjust(left=0.11, bottom=0.1, right=0.98, top=0.98, wspace=0, hspace=0)
+        ax = self.gui.ax
 
-        self.gui.ax[figid].cla() 
+        fig.subplots_adjust(left=0.11, bottom=0.1, right=0.98, top=0.98, wspace=0, hspace=0)
 
-        if self.gui.xlim_l_last>0:
-            self.gui.ax[0].set_xlim([self.gui.xlim_l_last,self.gui.xlim_h_last])
-            self.gui.ax[1].set_xlim([self.gui.xlim_l_last,self.gui.xlim_h_last])
+        ax[figid].cla()
+
+        if self.gui.xlim_l_last > 0:
+            ax[0].set_xlim([self.gui.xlim_l_last, self.gui.xlim_h_last])
+            ax[1].set_xlim([self.gui.xlim_l_last, self.gui.xlim_h_last])
         else:
-            self.gui.ax[0].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
-            self.gui.ax[1].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
-                
-        if figid==0:
+            ax[0].set_xlim([min(self.gui.xcurrent), max(self.gui.xcurrent)])
+            ax[1].set_xlim([min(self.gui.xcurrent), max(self.gui.xcurrent)])
+
+        if figid == 0:
             x, y = self.gui.xcurrent, self.gui.ycurrent
         else:
-            x,y = self.gui.xcurrent,self.gui.ynormcurrent
+            x, y = self.gui.xcurrent, self.gui.ynormcurrent
 
-        col=['b','g']
+        col = ['b', 'g']
 
-        self.gui.ax[figid].step(x, y,color=col[figid],lw=0.8)
+        ax[figid].step(x, y, color=col[figid], lw=0.8)
 
-        if figid==0:
-            self.gui.ax[0].text(0.03,0.9,'Original',fontsize=20,transform=self.gui.ax[0].transAxes)
-        elif figid==1:
-            self.gui.ax[1].text(0.03,0.9,'Normalized',fontsize=20,transform=self.gui.ax[1].transAxes)
+        if figid == 0:
+            ax[0].text(0.03, 0.9, 'Original', fontsize=20, transform=ax[0].transAxes)
+        elif figid == 1:
+            ax[1].text(0.03, 0.9, 'Normalized', fontsize=20, transform=ax[1].transAxes)
 
         # Plot continuum fit in figure 0
-        yi = self.gui.yi
-        if len(yi)>0 and figid==0 and showfit==True:
-            self.gui.ax[0].plot(x, yi, color='r', lw=1.5, label='spline fit')
+        if len(self.gui.yi) > 0 and figid == 0 and showfit:
+            ax[0].plot(x, self.gui.yi, color='r', lw=1.5)  # Assuming yi is accessible
 
-            _, telluric_intervals = self.create_telluric_mask()
+            _, telluric_intervals = self.create_telluric_mask()  # Assuming this method is accessible
 
-            # Fill between each pair of wavelengths in the telluric intervals
             for start, end in telluric_intervals:
-                ylim_l = np.nanmin(self.gui.ycurrent)
-                ylim_h = np.nanmax(self.gui.ycurrent)
-                yy = np.linspace(ylim_l, ylim_h, 10)
-                self.gui.ax[0].fill_betweenx(yy, start, end, color='red', alpha=0.3, label='telluric bands')
+                ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3)
 
-        #self.gui.ax[1].set_xlabel('$\lambda\ [\mathrm{\AA}]$')
-        self.gui.ax[1].set_xlabel('wavelength [AA]')
-
+        ax[1].set_xlabel('wavelength [AA]')
+        
         # plot mask in top panel
         if len(self.gui.mask)>0:
             mask_edges=self.find_mask_edges()
@@ -576,12 +542,16 @@ class start(QObject):
                 ylim_l=np.nanmin(self.gui.ycurrent)
                 ylim_h=np.nanmax(self.gui.ycurrent)
                 yy=np.linspace(ylim_l,ylim_h,10)
-                self.gui.ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3, label='masked region')
+                ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3, label='masked region')
 
-        # draw and show
-        plt.draw()
-        plt.show(block=False)
-        self.gui.activateWindow()
+        # plot a horizontal line at 1
+        ax[1].axhline(y=1.0, linestyle='--', color='k', lw=2)
+
+        self.plotwindow.canvas.draw()
+        self.plotwindow.show()
+        self.plotwindow.activateWindow()  # Assuming you want to bring the plot window to the front
+
+
 #                                  FITTING 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -600,23 +570,15 @@ class start(QObject):
 
         if len(self.gui.xcurrent)>1:
 
-            xlim_l=float(plt.gca().get_xlim()[0])
-            xlim_h=float(plt.gca().get_xlim()[1])
-
-            # user has zoomed in
-            if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
-                self.gui.xcurrent=self.gui.x[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
-                self.gui.ycurrent=self.gui.y[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
-
-                self.gui.xlim_l_last=xlim_l
-                self.gui.xlim_h_last=xlim_h
-                
-                self.linetable_mask(dofit=False)
-                self.gui.yi=np.array([])
-
             self.apply_mask()
             x, y = self.gui.xcurrent, self.gui.ymaskedcurrent
-    
+
+            xlim_l=float(self.gui.ax[0].get_xlim()[0])
+            xlim_h=float(self.gui.ax[0].get_xlim()[1])
+
+            self.gui.xlim_l_last=xlim_l
+            self.gui.xlim_h_last=xlim_h
+                
             k = int(self.gui.lineEdit_degree.text())
             if k <=1: k=1
             elif k>5: k=5
@@ -671,7 +633,9 @@ class start(QObject):
             else:
                 offs = float(self.gui.lineEdit_offset.text())
             
-            ynorm = np.divide(np.array(self.gui.ycurrent) + offs, np.array(yi), where=np.array(yi) != 0)
+            ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
+
+            ynorm *= offs
     
             self.gui.yi = np.array(yi)
             if not len(self.gui.ynorm)>0:
@@ -751,13 +715,22 @@ class start(QObject):
 
             # do several iterations to improve masks
             iters=20
+            new_mask=np.array([True for x in yfit])
             for i in range(iters):
 
+                if np.nansum(new_mask)==0:
+                    print(f"Stopping line identification at iteration {i}.")
+                    yfit = yfit_prev
+                    continue
+
+                yfit_prev = yfit
+
                 # Fit a 3rd degree polynomial to the data during first 2 iterations
+                # else do first degree
                 if i<2:
-                    coefficients = np.polyfit(xfit, yfit, 2)
+                    coefficients = np.polyfit(xfit, yfit, 3)
                 else:
-                    coefficients = np.polyfit(xfit, yfit, 3) 
+                    coefficients = np.polyfit(xfit, yfit, 1) 
 
                 # Create a polynomial function from the coefficients
                 polynomial = np.poly1d(coefficients)
@@ -768,17 +741,26 @@ class start(QObject):
                 # Divide the original y-values by the fitted ones
                 normed_y = self.gui.ynormcurrent / fitted_y
 
-                masker_high = PeakMask(normed_y, sigma_smooth=4, sigma_threshold=sigma_high, rms_tolerance=1)
-                masker_low = PeakMask(normed_y, sigma_smooth=4, sigma_threshold=sigma_low, rms_tolerance=1)
+                try:
+                    masker_high = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_high, rms_tolerance=1)
+                    masker_low = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_low, rms_tolerance=1)
  
-                mask_high = masker_high.create_mask()
-                mask_low = masker_low.create_mask()
+                    mask_high = masker_high.create_mask()
+                    mask_low = masker_low.create_mask()
+                except:
+                    print(f"PeakMask failure in line identification iteration no {i}.")
+                    continue
 
                 mask_high[self.gui.telluricmask==0] = False
                 mask_low[self.gui.telluricmask==0] = False
 
-                new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
-                new_mask = np.array(exp_mask(new_mask, radius=4, keep_mask=True, quiet=True),dtype=bool)
+                try:
+                    new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
+                    new_mask = np.array(exp_mask(new_mask, radius=6, keep_mask=True, quiet=True),dtype=bool)
+                except:
+                    print(f"Exp_mask failure in line identification iteration no {i}.")
+                    continue
+
                 new_mask[self.gui.telluricmask==0] = False
 
                 # Masked values are replaced with np.nan
@@ -793,6 +775,9 @@ class start(QObject):
                 # Interpolate y values at positions where new_mask is True
                 y[new_mask] = np.interp(x_values[new_mask], x_values[~new_mask], y[~new_mask])
 
+                xfit = x[new_mask != 0]
+                yfit = y[new_mask != 0]
+ 
                 
             if len(new_mask)>0:
                self.gui.mask=new_mask
@@ -1007,5 +992,4 @@ class start(QObject):
         self.fit_spline()
         self.make_fig(0)
         self.make_fig(1)
-        
         
