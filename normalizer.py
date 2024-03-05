@@ -217,7 +217,7 @@ class start(QObject):
 
         filename,_ = QFileDialog.getSaveFileName(None,'Save to FITS', self.tr("(*.fits)"))
         """
-        filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'_'+str(int(self.gui.xlim_h_last))+'.fits'
+        filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'-'+str(int(self.gui.xlim_h_last))+'.fits'
         self.gui.lbl_fname2.setText(filename)
         self.writefits(filename)
 
@@ -829,32 +829,6 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def apply_mask_old(self):
-
-        self.create_telluric_mask()
-
-        if len(self.gui.mask)>0 and len(self.gui.telluricmask)>0:
-            print('case a')
-            ymasked = np.copy(self.gui.ycurrent)
-            ymasked[self.gui.mask] = np.nan
-            ymasked[self.gui.telluricmask==0] = np.nan
-            self.gui.ymaskedcurrent = np.array(ymasked)
-        elif len(self.gui.telluricmask)>0:
-            print('case b')
-            ymasked = np.copy(self.gui.ycurrent)
-            ymasked[self.gui.telluricmask==0] = np.nan
-            self.gui.ymaskedcurrent = np.array(ymasked)
-        elif len(self.gui.mask)>0:
-            print('case c')
-            ymasked = np.copy(self.gui.ycurrent)
-            ymasked[self.gui.mask] = np.nan
-            self.gui.ymaskedcurrent = np.array(ymasked)
-        else:
-            self.gui.ymaskedcurrent = np.copy(self.gui.ycurrent)
-            
-        nans, x= self.nan_helper(self.gui.ymaskedcurrent)
-        if np.any(~nans):
-            self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
 
     def apply_mask(self):
 
