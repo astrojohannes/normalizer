@@ -73,6 +73,7 @@ class start(QObject):
         # figure with 2 subplots
         self.plotwindow = PlotWindow()
         self.plotwindow.custom_toolbar.slicePressed.connect(self.on_slice_pressed)
+        self.plotwindow.custom_toolbar.resetPressed.connect(self.on_reset_pressed)
         self.plotwindow.custom_toolbar.homePressed.connect(self.on_home_pressed)
         self.gui.fig = self.plotwindow.figure  # Use the Figure from PlotWindow 
         self.gui.ax = self.plotwindow.ax  # Use the Axes from PlotWindow
@@ -147,11 +148,7 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
         
-    def on_home_pressed(self, *args, **kwargs):
-        
-        """ add some functionality to matplotlib's home button
-        
-        """
+    def on_reset_pressed(self):
         
         self.gui.xcurrent=self.gui.x
         self.gui.ycurrent=self.gui.y
@@ -165,6 +162,21 @@ class start(QObject):
 
         self.gui.xlim_h_last=max(self.gui.x)
         self.gui.xlim_l_last=min(self.gui.x)
+
+        self.fit_spline(showfit=False)
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def on_home_pressed(self, *args, **kwargs):
+        
+        """ add some functionality to matplotlib's home button
+        
+        """
+
+        self.gui.ax[0].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
+        self.gui.ax[1].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
+        
+        self.fit_spline(showfit=False)
 
 
 

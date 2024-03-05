@@ -9,14 +9,22 @@ import numpy as np
 
 class CustomToolbar(NavigationToolbar):
     slicePressed = pyqtSignal()
+    resetPressed = pyqtSignal()
     homePressed = pyqtSignal()
+
 
     def __init__(self, canvas, parent, coordinates=True):
         super().__init__(canvas, parent, coordinates)
 
+        ##### Slice action
         # define new button/action to slice spectrum based on current view
         self.slice_action = QAction('Slice', self)  # Create the action
         self.slice_action.triggered.connect(self.slice_spectrum)  # Connect to its slot
+
+        ##### Reset action
+        # define new button/action to slice spectrum based on current view
+        self.reset_action = QAction('Reset', self)  # Create the action
+        self.reset_action.triggered.connect(self.reset_spectrum)  # Connect to its slot
 
         # insert new slice button at a specific position, i.e. after pan
         actions = self.actions()  # Get all current actions
@@ -27,19 +35,25 @@ class CustomToolbar(NavigationToolbar):
                 pan_action_index = i
                 break
 
-        # insert the new action at given position
+        # insert the sclice action/button at given position
         if pan_action_index is not None:
             self.insertAction(actions[pan_action_index + 1], self.slice_action)
         else:
             self.addAction(self.slice_action)
 
-    def slice_spectrum(self):
-        self.slicePressed.emit()
+        # Insert new reset button at end of toolbar
+        self.insertAction(actions[-1], self.reset_action)
 
     def home(self, *args, **kwargs):
         # Override the home function with custom behavior
         super().home(*args, **kwargs)
         self.homePressed.emit()
+
+    def slice_spectrum(self):
+        self.slicePressed.emit()
+
+    def reset_spectrum(self):
+        self.resetPressed.emit()
 
 class PlotWindow(QMainWindow):
     def __init__(self):
