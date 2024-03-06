@@ -158,10 +158,17 @@ class start(QObject):
             self.gui.xlim_l_last=xlim_l
             self.gui.xlim_h_last=xlim_h
                 
-            self.linetable_mask(dofit=False)
             self.gui.yi=np.array([])
+            self.gui.telluricmask=np.array([])
+            self.gui.mask=np.array([])
 
-        self.fit_spline(showfit=True)
+            self.gui.yi=np.array([])
+            self.gui.ymaskedcurrent=np.array([])
+            self.gui.ynorm = np.array([])
+            self.gui.ynormcurrent=np.array([])
+
+            self.fit_spline(showfit=True)
+
  
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -171,9 +178,12 @@ class start(QObject):
         self.gui.xcurrent=self.gui.x
         self.gui.ycurrent=self.gui.y
         self.gui.ymaskedcurrent=self.gui.y
+        self.gui.ynorm = np.array([])
         self.gui.ynormcurrent=self.gui.ynorm
         self.gui.yi=np.array([])
         self.gui.mask=np.array([])
+        self.gui.telluricmask=np.array([])
+        
 
         self.gui.ax[0].set_xlim([min(self.gui.x),max(self.gui.x)])        
         self.gui.ax[1].set_xlim([min(self.gui.x),max(self.gui.x)])        
@@ -238,6 +248,7 @@ class start(QObject):
             self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
+        self.on_reset_pressed()
         self.make_fig(0)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -548,7 +559,7 @@ class start(QObject):
         export_mask[export_mask==False] = 2
 
         if export_mask.shape[0] == 0:
-            print("No user mask found.")
+            print("No user mask available for export.")
             export_mask = self.gui.telluricmask
         else:
             export_mask[self.gui.telluricmask==0] = 0
@@ -565,12 +576,26 @@ class start(QObject):
         tbhdu = fits.BinTableHDU.from_columns(cols)
     
         # Create a new header for the output file
+        """
         new_hdr = fits.Header()
         new_hdr['SIMPLE'] = True
-        new_hdr['BITPIX'] = -32  # For single-precision floating-point values
+        new_hdr['BITPIX'] = -32
         new_hdr['NAXIS'] = 2
         new_hdr['EXTEND'] = True
-    
+        """   
+
+        # Modify the header
+        new_hdr = tbhdu.header  # Use the existing header of tbhdu
+        new_hdr.add_comment("Spectrum processed with Spectrum Normalizer")
+        new_hdr.add_comment("https://github.com/astrojohannes/normalizer")
+        vrad = self.gui.lineEdit_auto_velocity_shift.text()
+        if vrad != '':
+            try:
+                vrad = str(round(float(vrad),2))
+                new_hdr['SPEN_RV'] = (vrad, 'Rad. vel. in km/s from Spec. Normalizer')
+            except:
+                pass 
+ 
         # Write the data to the output FITS file
         tbhdu.writeto(self.gui.lbl_fname2.text(), overwrite=True)
 
