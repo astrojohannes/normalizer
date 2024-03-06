@@ -4,6 +4,7 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout
 from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication
 from PyQt5.uic import loadUi
+from PyQt5.QtGui import QFont
 
 import numpy as np
 from numpy import inf, nan
@@ -129,7 +130,19 @@ class start(QObject):
 
         # Hide button to apply velo shift
         self.gui.pushButton_shift_spectrum.setVisible(False)
-        #self.gui.lineEdit_auto_velocity_shift.setVisible(False)
+        self.gui.lineEdit_auto_velocity_shift.setVisible(True)
+
+        # adjust table row height
+        table = self.gui.tableWidget
+        for i in range(table.rowCount()):
+            table.setRowHeight(i, 20)  # Set each row's height to 40 pixels
+
+        font = QFont()
+        font.setPointSize(10)  # Set the font size to 10 points for table
+
+        # Apply the font to the table
+        table.setFont(font)
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -678,11 +691,8 @@ class start(QObject):
             # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
             # A workaround is to use zero weights for not-a-number data points:
             w = np.isnan(self.gui.ymaskedcurrent)
-            weights = 1e3*np.ones_like(y)
+            weights = 1000.0*np.ones_like(y)
             weights[w] = 0.0
-            # the weights are found after inverting
-            #w=~w
-            #w=np.array(w,dtype=np.float64)
             
             # if user provided fixpoints, raise their weights to assure that fit will intersect with these points
             wu=self.gui.lineEdit_fixpoints.text()
@@ -703,11 +713,6 @@ class start(QObject):
                     t=np.array([float(x) for x in tu],dtype=float)
                 # or use every ith value along x as knot point
                 else:
-                    """
-                    every=int(self.gui.lineEdit_interior_knots.text())
-                    t=self.gui.xcurrent[1:-1:every]
-                    t=t[~np.isnan(self.gui.ymaskedcurrent[1:-1:every])]
-                    """
 
                     every=int(self.gui.lineEdit_interior_knots.text())
 
@@ -732,9 +737,10 @@ class start(QObject):
                 # do the fit
                 # UnivariateSpline was found to have problems with large numeric y-values, so we down-scale to the mean
                 scalingfactor = np.nanmean(y)
+
                 if scalingfactor < 1000:
                     scalingfactor = 1.0
-                spl = self.gui.method(x, y/scalingfactor, k=k, w=weights, s=s, check_finite=False, ext=3)
+                spl = self.gui.method(x, y/scalingfactor, k=k, w=weights/scalingfactor, s=s, check_finite=True, ext=3)
                 spl.set_smoothing_factor(s)
                 yi=scalingfactor*np.copy(spl(x)).flatten()
    
