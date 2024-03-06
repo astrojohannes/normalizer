@@ -573,7 +573,7 @@ class start(QObject):
         export_mask[export_mask==False] = 2
 
         if export_mask.shape[0] == 0:
-            print("No user mask available for export.")
+            print("No user line mask available for export.")
             export_mask = self.gui.telluricmask
         else:
             export_mask[self.gui.telluricmask==0] = 0
@@ -739,7 +739,7 @@ class start(QObject):
             wu=self.gui.lineEdit_fixpoints.text()+','
             wu=wu.split(',')
             if len(wu)>0 and wu[0].strip() != '':
-                wu=np.array([float(a) for a in wu],dtype=float)
+                wu=np.array([float(a) for a in wu[:-1]],dtype=float)
                 for fp in wu:
                     weights[self.find_nearest_idx(x,fp)]=1e6
 
@@ -765,7 +765,6 @@ class start(QObject):
                 yi=np.copy(spl(x)).flatten()
 
                 if len(self.gui.ymaskedcurrent)>0 and len(yi)>0:
-                    self.gui.knots_x = self.gui.x[final_indices]
                     self.gui.knots_y = np.copy(spl(self.gui.knots_x)).flatten()
     
             else:
@@ -786,13 +785,18 @@ class start(QObject):
                 offs = float(self.gui.lineEdit_offset.text())
 
             ynorm = np.divide(y, np.array(yi), where=np.array(yi) != 0)
-
             ynorm *= offs
-   
+
             self.gui.yi = np.array(yi)
+ 
             if not len(self.gui.ynorm)>0:
                 self.gui.ynorm = ynorm
             self.gui.ynormcurrent = ynorm
+
+            # now we set to NaN the telluric-masked regions
+            if len(self.gui.telluricmask)>0:
+                self.gui.yi[self.gui.telluricmask==0] = np.nan
+                self.gui.ynormcurrent[self.gui.telluricmask==0] = 1.0
 
             self.make_fig(0,showfit=showfit)
             self.make_fig(1,showfit=showfit)
