@@ -167,6 +167,9 @@ class start(QObject):
             self.gui.ynorm = np.array([])
             self.gui.ynormcurrent=np.array([])
 
+            self.gui.knots_x = np.array([])
+            self.gui.knots_y = np.array([])
+
             self.fit_spline(showfit=True)
 
  
@@ -191,7 +194,15 @@ class start(QObject):
         self.gui.xlim_h_last=max(self.gui.x)
         self.gui.xlim_l_last=min(self.gui.x)
 
-        self.fit_spline(showfit=False)
+        self.gui.knots_x = np.array([])
+        self.gui.knots_y = np.array([])
+
+        self.gui.ax[0].cla()
+        self.gui.ax[1].cla()
+
+        self.make_fig(0)
+
+        #self.fit_spline(showfit=False)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -204,7 +215,7 @@ class start(QObject):
         self.gui.ax[0].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
         self.gui.ax[1].set_xlim([min(self.gui.xcurrent),max(self.gui.xcurrent)])
         
-        self.fit_spline(showfit=False)
+        self.fit_spline(showfit=True)
 
 
 
@@ -510,6 +521,9 @@ class start(QObject):
         self.gui.ynorm = np.array([])
         self.gui.ynormcurrent = np.array([])
         self.gui.yi = np.array([])
+        self.gui.knots_x = np.array([])
+        self.gui.knots_y = np.array([])
+
    
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
@@ -668,16 +682,18 @@ class start(QObject):
         # plot the LSQ method spline knots in upper panel
         if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
             # Convert list of knots to a numpy array for efficient operations
-            knots_x = np.array(self.gui.knots_x)
-            knots_y = np.array(self.gui.knots_y)
+            if len(self.gui.knots_x)>0 and len(self.gui.yi)>0:
+                knots_x = np.array(self.gui.knots_x)
+                knots_y = np.array(self.gui.knots_y)
 
-            # Plot all points at once
-            ax[0].scatter(knots_x, knots_y, c='k')
+                # Plot all points at once
+                ax[0].scatter(knots_x, knots_y, c='r')
 
         self.plotwindow.canvas.draw()
         self.plotwindow.show()
-        self.plotwindow.activateWindow()  # Assuming you want to bring the plot window to the front
-
+        self.plotwindow.activateWindow()
+        self.gui.fig.tight_layout()
+ 
 
 #                                  FITTING 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -716,46 +732,41 @@ class start(QObject):
             # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
             # A workaround is to use zero weights for not-a-number data points:
             w = np.isnan(self.gui.ymaskedcurrent)
-            weights = 1000.0*np.ones_like(y)
+            weights = np.ones_like(y)
             weights[w] = 0.0
             
             # if user provided fixpoints, raise their weights to assure that fit will intersect with these points
-            wu=self.gui.lineEdit_fixpoints.text()
+            wu=self.gui.lineEdit_fixpoints.text()+','
             wu=wu.split(',')
             if len(wu)>0 and wu[0].strip() != '':
                 wu=np.array([float(a) for a in wu],dtype=float)
                 for fp in wu:
-                    w[self.find_nearest_idx(x,fp)]=1e10
+                    weights[self.find_nearest_idx(x,fp)]=1e6
 
             if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
                 
-                # knot points where the polynomials connect
-                tu=self.gui.lineEdit_interior_knots.text()
-                tu=tu.split(',')
-                
-                # user input of knot points
-                if len(tu)>1:
-                    t=np.array([float(x) for x in tu],dtype=float)
-                # or use every ith value along x as knot point
+                every=int(self.gui.lineEdit_interior_knots.text())
+
+                # Obtain the t array with step 'every'
+                t_indices = np.arange(1, len(x), every)  # Get the indices with the step 'every'.
+
+                if len(self.gui.ymaskedcurrent)>0:
+                    # filter these indices based on the non-NaN status in 'ymaskedcurrent'.
+                    final_indices = t_indices[~np.isnan(self.gui.ymaskedcurrent[t_indices])]
                 else:
+                    final_indices = t_indices
 
-                    every=int(self.gui.lineEdit_interior_knots.text())
+                # Use these final indices to access the corresponding items in 'xcurrent'.
+                self.gui.knots_x = x[final_indices]
+                t = self.gui.knots_x
 
-                    # Obtain the t array with step 'every'
-                    t_indices = np.arange(1, len(self.gui.xcurrent), every)  # Get the indices with the step 'every'.
-
-                    # Now, filter these indices based on the non-NaN status in 'ymaskedcurrent'.
-                    filtered_indices = t_indices[~np.isnan(self.gui.ymaskedcurrent[t_indices])]
-
-                    # Use these filtered indices to access the corresponding items in 'xcurrent'.
-                    self.gui.knots_x = self.gui.xcurrent[filtered_indices]
-                    self.gui.knots_y = self.gui.ycurrent[filtered_indices]
-
-                    t = self.gui.knots_x
-                
                 # do the fit
                 spl = self.gui.method(x, y, t, k=k, w=weights, check_finite=False, ext=3)
                 yi=np.copy(spl(x)).flatten()
+
+                if len(self.gui.ymaskedcurrent)>0 and len(yi)>0:
+                    self.gui.knots_x = self.gui.x[final_indices]
+                    self.gui.knots_y = np.copy(spl(self.gui.knots_x)).flatten()
     
             else:
                 # UnivariateSpline
