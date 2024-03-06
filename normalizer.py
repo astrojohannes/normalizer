@@ -93,7 +93,7 @@ class start(QObject):
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
         self.gui.lineEdit_offset.setText('1.0')
-        self.gui.lineEdit_auto_velocity_shift.setText('0')
+        self.gui.lineEdit_auto_velocity_shift.setText('0.0')
         self.gui.lineEdit_auto_velocity_shift_lim1.setText('-50')
         self.gui.lineEdit_auto_velocity_shift_lim2.setText('50')
         self.gui.rv=0.0
@@ -129,7 +129,7 @@ class start(QObject):
 
         # Hide button to apply velo shift
         self.gui.pushButton_shift_spectrum.setVisible(False)
-        self.gui.lineEdit_auto_velocity_shift.setVisible(False)
+        #self.gui.lineEdit_auto_velocity_shift.setVisible(False)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -198,7 +198,7 @@ class start(QObject):
         self.gui.pushButton_linetable_mask.clicked.connect(self.linetable_mask)
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
         self.gui.pushButton_determine_rad_velocity.clicked.connect(self.determine_rad_velocity)
-        self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
+        #self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
 
 #                                 IO PART
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -238,9 +238,10 @@ class start(QObject):
 
         filename,_ = QFileDialog.getSaveFileName(None,'Save to FITS', self.tr("(*.fits)"))
         """
-        filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'-'+str(int(self.gui.xlim_h_last))+'.fits'
-        self.gui.lbl_fname2.setText(filename)
-        self.writefits(filename)
+        if len(self.gui.x) > 0:
+            filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'-'+str(int(self.gui.xlim_h_last))+'.fits'
+            self.gui.lbl_fname2.setText(filename)
+            self.writefits(filename)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -341,8 +342,8 @@ class start(QObject):
         lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
         telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
 
-        # Initialize new array for telluric mask with -1
-        self.gui.telluricmask = np.full_like(self.gui.xcurrent, -1)
+        # Initialize new array for telluric mask
+        self.gui.telluricmask = np.full_like(self.gui.xcurrent, 1)
 
         # Set values enclosed by intervals to 0
         for a, b in telluric_intervals:
@@ -598,9 +599,9 @@ class start(QObject):
 
         # Plot continuum fit in figure 0
         if len(self.gui.yi) > 0 and figid == 0 and showfit:
-            ax[0].plot(x, self.gui.yi, color='r', lw=1.5)  # Assuming yi is accessible
+            ax[0].plot(x, self.gui.yi, color='r', lw=1.5)
 
-            _, telluric_intervals = self.create_telluric_mask()  # Assuming this method is accessible
+            _, telluric_intervals = self.create_telluric_mask()
 
             for start, end in telluric_intervals:
                 ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3)
@@ -626,6 +627,15 @@ class start(QObject):
         # plot a horizontal line at 1
         ax[1].axhline(y=1.0, linestyle='--', color='k', lw=2)
 
+        # plot the LSQ method spline knots in upper panel
+        if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
+            # Convert list of knots to a numpy array for efficient operations
+            knots_x = np.array(self.gui.knots_x)
+            knots_y = np.array(self.gui.knots_y)
+
+            # Plot all points at once
+            ax[0].scatter(knots_x, knots_y, c='k')
+
         self.plotwindow.canvas.draw()
         self.plotwindow.show()
         self.plotwindow.activateWindow()  # Assuming you want to bring the plot window to the front
@@ -650,7 +660,7 @@ class start(QObject):
         if len(self.gui.xcurrent)>1:
 
             self.apply_mask()
-            x, y = self.gui.xcurrent, self.gui.ymaskedcurrent
+            x, y = self.gui.xcurrent, self.gui.ycurrent
 
             xlim_l=float(self.gui.ax[0].get_xlim()[0])
             xlim_h=float(self.gui.ax[0].get_xlim()[1])
@@ -667,11 +677,12 @@ class start(QObject):
     
             # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
             # A workaround is to use zero weights for not-a-number data points:
-            w = np.isnan(y)
-            y[w] = 0.
+            w = np.isnan(self.gui.ymaskedcurrent)
+            weights = 1e3*np.ones_like(y)
+            weights[w] = 0.0
             # the weights are found after inverting
-            w=~w
-            w=np.array(w,dtype=np.float64)
+            #w=~w
+            #w=np.array(w,dtype=np.float64)
             
             # if user provided fixpoints, raise their weights to assure that fit will intersect with these points
             wu=self.gui.lineEdit_fixpoints.text()
@@ -692,12 +703,28 @@ class start(QObject):
                     t=np.array([float(x) for x in tu],dtype=float)
                 # or use every ith value along x as knot point
                 else:
+                    """
                     every=int(self.gui.lineEdit_interior_knots.text())
                     t=self.gui.xcurrent[1:-1:every]
-                    t=t[~np.isnan(t)]
+                    t=t[~np.isnan(self.gui.ymaskedcurrent[1:-1:every])]
+                    """
+
+                    every=int(self.gui.lineEdit_interior_knots.text())
+
+                    # Obtain the t array with step 'every'
+                    t_indices = np.arange(1, len(self.gui.xcurrent), every)  # Get the indices with the step 'every'.
+
+                    # Now, filter these indices based on the non-NaN status in 'ymaskedcurrent'.
+                    filtered_indices = t_indices[~np.isnan(self.gui.ymaskedcurrent[t_indices])]
+
+                    # Use these filtered indices to access the corresponding items in 'xcurrent'.
+                    self.gui.knots_x = self.gui.xcurrent[filtered_indices]
+                    self.gui.knots_y = self.gui.ycurrent[filtered_indices]
+
+                    t = self.gui.knots_x
                 
                 # do the fit
-                spl = self.gui.method(x, y, t, k=k, w=w)
+                spl = self.gui.method(x, y, t, k=k, w=weights, check_finite=False, ext=3)
                 yi=np.copy(spl(x)).flatten()
     
             else:
@@ -707,7 +734,7 @@ class start(QObject):
                 scalingfactor = np.nanmean(y)
                 if scalingfactor < 1000:
                     scalingfactor = 1.0
-                spl = self.gui.method(x, y/scalingfactor, k=k, w=w, s=s)
+                spl = self.gui.method(x, y/scalingfactor, k=k, w=weights, s=s, check_finite=False, ext=3)
                 spl.set_smoothing_factor(s)
                 yi=scalingfactor*np.copy(spl(x)).flatten()
    
@@ -716,7 +743,7 @@ class start(QObject):
             else:
                 offs = float(self.gui.lineEdit_offset.text())
 
-            ynorm = np.divide(np.array(self.gui.ycurrent), np.array(yi), where=np.array(yi) != 0)
+            ynorm = np.divide(y, np.array(yi), where=np.array(yi) != 0)
 
             ynorm *= offs
    
@@ -835,7 +862,7 @@ class start(QObject):
             sigma_low=float(self.gui.lineEdit_sigma_low.text())        
 
             # do several iterations to improve masks
-            iters=40
+            iters=10
             new_mask=np.array([True for x in yfit])
             for i in range(iters):
 
@@ -863,8 +890,8 @@ class start(QObject):
                 normed_y = self.gui.ynormcurrent / fitted_y
 
                 try:
-                    masker_high = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_high, rms_tolerance=1)
-                    masker_low = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_low, rms_tolerance=1)
+                    masker_high = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_high, rms_tolerance=0.1)
+                    masker_low = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_low, rms_tolerance=0.1)
  
                     mask_high = masker_high.create_mask()
                     mask_low = masker_low.create_mask()
@@ -945,11 +972,11 @@ class start(QObject):
 
     def apply_mask(self):
 
-        self.create_telluric_mask()
-
         # Backup original masks
         original_mask = np.copy(self.gui.mask) if len(self.gui.mask) > 0 else None
         original_telluric_mask = np.copy(self.gui.telluricmask) if len(self.gui.telluricmask) > 0 else None
+
+        #_, telluric_intervals = self.create_telluric_mask()  # Assuming this method is accessible
 
         # Apply initial masks to the data
         if original_mask is not None or original_telluric_mask is not None:
@@ -962,17 +989,20 @@ class start(QObject):
         else:
             self.gui.ymaskedcurrent = np.copy(self.gui.ycurrent)
 
+        """
         # Helper for nan handling in interpolation
-        nans, x= self.nan_helper(self.gui.ymaskedcurrent)
+        nans, x = self.nan_helper(self.gui.ymaskedcurrent)
         if np.any(~nans):
             self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
+        """
 
+        """
         # Reapply masks after interpolation
         if original_mask is not None:
             self.gui.ymaskedcurrent[original_mask] = np.nan
         if original_telluric_mask is not None:
             self.gui.ymaskedcurrent[original_telluric_mask == 0] = np.nan
-
+        """
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -1049,7 +1079,7 @@ class start(QObject):
             waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
         else:
             self.gui.rv=0.0
-            self.gui.lineEdit_auto_velocity_shift.setText('0')
+            self.gui.lineEdit_auto_velocity_shift.setText('0.0')
             return
 
         err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
@@ -1113,6 +1143,8 @@ class start(QObject):
         plt.xlabel('R$_V$ [Å]')
         plt.tight_layout()
         plt.show()
+
+        self.gui.lineEdit_auto_velocity_shift.setText(str(round(rv[maxind],3)))
 
     def apply_velocity_shift(self,rv_new=0.0):
         
