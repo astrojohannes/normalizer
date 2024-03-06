@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QAction
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -12,9 +12,10 @@ class CustomToolbar(NavigationToolbar):
     resetPressed = pyqtSignal()
     homePressed = pyqtSignal()
 
+    def __init__(self, canvas, parent, coordinates_callback):
+        super().__init__(canvas, parent, coordinates_callback)
 
-    def __init__(self, canvas, parent, coordinates=True):
-        super().__init__(canvas, parent, coordinates)
+        self.coordinates_callback = coordinates_callback
 
         ##### Slice action
         # define new button/action to slice spectrum based on current view
@@ -23,10 +24,10 @@ class CustomToolbar(NavigationToolbar):
 
         ##### Reset action
         # define new button/action to slice spectrum based on current view
-        self.reset_action = QAction('Reset', self)  # Create the action
-        self.reset_action.triggered.connect(self.reset_spectrum)  # Connect to its slot
+        self.reset_action = QAction('Reset', self)
+        self.reset_action.triggered.connect(self.reset_spectrum)
 
-        # insert new slice button at a specific position, i.e. after pan
+        # insert new slice toolbar action at a specific position, i.e. after pan
         actions = self.actions()  # Get all current actions
         pan_action_index = None  # search for the index of the 'Pan' action
 
@@ -44,6 +45,22 @@ class CustomToolbar(NavigationToolbar):
         # Insert new reset button at end of toolbar
         self.insertAction(actions[-1], self.reset_action)
 
+        #########################
+        # Insert BAD flag button
+        self.badflag_button = QPushButton('Flag BAD')
+        self.badflag_button.clicked.connect(self.activate_rectangle_selection_bad)
+        self.badflag_button.setStyleSheet("background-color: #a0a0a0;")
+        self.addWidget(self.badflag_button)
+
+        #########################
+        # Insert LINE flag button
+        self.lineflag_button = QPushButton('Flag LINE')
+        self.lineflag_button.clicked.connect(self.activate_rectangle_selection_line)
+        self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")
+        self.addWidget(self.lineflag_button)
+
+        self.x0, self.y0, self.x1, self.y1, self.flagtype = None, None, None, None, None
+
     def home(self, *args, **kwargs):
         # Override the home function with custom behavior
         super().home(*args, **kwargs)
@@ -55,7 +72,57 @@ class CustomToolbar(NavigationToolbar):
     def reset_spectrum(self):
         self.resetPressed.emit()
 
+    def activate_rectangle_selection_bad(self):
+        self.flagtype = 'BAD'
+
+        # Connect the mouse press and release events to custom handlers
+        self.canvas.mpl_connect('button_press_event', self.on_press)
+        self.canvas.mpl_connect('button_release_event', self.on_release)
+
+        # Before activating the rectangle selection, you might want to change the button style to indicate the mode is active
+        self.badflag_button.setStyleSheet("background-color: red;")  # Change color to indicate active selection mode
+ 
+        # Change cursor to crosshair
+        self.canvas.setCursor(Qt.CrossCursor)
+
+    def activate_rectangle_selection_line(self):
+        self.flagtype = 'LINE'
+
+        # Connect the mouse press and release events to custom handlers
+        self.canvas.mpl_connect('button_press_event', self.on_press)
+        self.canvas.mpl_connect('button_release_event', self.on_release)
+
+        # Before activating the rectangle selection, you might want to change the button style to indicate the mode is active
+        self.lineflag_button.setStyleSheet("background-color: #ccc;")  # Change color to indicate active selection mode
+ 
+        # Change cursor to crosshair
+        self.canvas.setCursor(Qt.CrossCursor)
+
+    def on_press(self, event):
+        # Record the start point (x0, y0)
+        self.x0, self.y0 = event.xdata, event.ydata
+        
+
+    def on_release(self, event):
+        # Record the end point (x1, y1) and trigger the user-defined action
+        self.x1, self.y1 = event.xdata, event.ydata
+        # Ensure the starting and ending points are defined
+        if None not in (self.x0, self.y0, self.x1, self.y1):
+            self.coordinates_callback(self.x0, self.y0, self.x1, self.y1, self.flagtype)
+        # Disconnect the events after selection to prevent multiple connections
+        self.canvas.mpl_disconnect(self.canvas.callbacks.connect('button_press_event', self.on_press))
+        self.canvas.mpl_disconnect(self.canvas.callbacks.connect('button_release_event', self.on_release))
+
+        # Reset cursor back to default
+        self.canvas.unsetCursor()
+
+        self.badflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+        self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+
+
 class PlotWindow(QMainWindow):
+    coordinatesSelected = pyqtSignal(float, float, float, float, str) 
+
     def __init__(self):
         super().__init__()
 
@@ -70,7 +137,7 @@ class PlotWindow(QMainWindow):
         self.layout.addWidget(self.canvas)
 
         # Custom toolbar with a new button
-        self.custom_toolbar = CustomToolbar(self.canvas, self)
+        self.custom_toolbar = CustomToolbar(self.canvas, self, self.user_flagging)
         self.addToolBar(self.custom_toolbar)
 
         # Give access to Figure and Axes
@@ -82,3 +149,6 @@ class PlotWindow(QMainWindow):
         ax[1] = self.canvas.figure.add_subplot(212, sharex = ax[0])
         self.canvas.draw()
         return ax
+
+    def user_flagging(self, x0, y0, x1, y1, flagtype):
+        self.coordinatesSelected.emit(x0, y0, x1, y1, flagtype)

@@ -81,6 +81,8 @@ class start(QObject):
         self.plotwindow.custom_toolbar.slicePressed.connect(self.on_slice_pressed)
         self.plotwindow.custom_toolbar.resetPressed.connect(self.on_reset_pressed)
         self.plotwindow.custom_toolbar.homePressed.connect(self.on_home_pressed)
+        self.plotwindow.coordinatesSelected.connect(self.on_coordinates_selected)
+
         self.gui.fig = self.plotwindow.figure  # Use the Figure from PlotWindow 
         self.gui.ax = self.plotwindow.ax  # Use the Axes from PlotWindow
 
@@ -143,6 +145,24 @@ class start(QObject):
         # Apply the font to the table
         table.setFont(font)
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def on_coordinates_selected(self, x0, y0, x1, y1, flagtype):
+        #print(f"Coordinates selected: ({x0}, {y0}) to ({x1}, {y1})")
+        tellurics = self.gui.lineEdit_telluric.text()
+        x0 = round(x0,2)
+        x1 = round(x1,2)
+
+        if flagtype=='BAD':
+            self.gui.lineEdit_telluric.setText(f"{tellurics}, ({x0},{x1})")
+        else:
+            linewidth = round(0.5*(x1-x0),2)
+            linecenter = round(x0 + linewidth,2)
+            self.add_values_to_first_empty_row(self.gui.tableWidget, [linecenter, linewidth])
+
+        self.linetable_mask()
+        self.fit_spline()
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -201,6 +221,8 @@ class start(QObject):
         self.gui.ax[1].cla()
 
         self.make_fig(0)
+
+        self.gui.tableWidget.clearContents()
 
         #self.fit_spline(showfit=False)
 
@@ -1015,6 +1037,25 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def add_values_to_first_empty_row(self, table_widget, values):
+        # Step 1: Determine the first empty row
+        row_count = table_widget.rowCount()
+        first_empty_row = None
+        for i in range(row_count):
+            if table_widget.item(i, 0) is None:  # Assuming checking the first column for emptiness
+                first_empty_row = i
+                break
+    
+        # Step 2: Insert a new row if necessary
+        if first_empty_row is None:  # All existing rows are filled
+            first_empty_row = row_count
+            table_widget.insertRow(first_empty_row)
+    
+        # Step 3: Set the item values for the cells in this row
+        for column_index, value in enumerate(values):
+            table_widget.setItem(first_empty_row, column_index, QTableWidgetItem(str(value)))
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def apply_mask(self):
 
