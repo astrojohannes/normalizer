@@ -269,12 +269,15 @@ class start(QObject):
         self.gui.mask=np.array([])
         self.gui.telluricmask=np.array([])
         
+        if len(self.gui.x)>0:
+            self.gui.ax[0].set_xlim([min(self.gui.x),max(self.gui.x)])        
+            self.gui.ax[1].set_xlim([min(self.gui.x),max(self.gui.x)])        
 
-        self.gui.ax[0].set_xlim([min(self.gui.x),max(self.gui.x)])        
-        self.gui.ax[1].set_xlim([min(self.gui.x),max(self.gui.x)])        
-
-        self.gui.xlim_h_last=max(self.gui.x)
-        self.gui.xlim_l_last=min(self.gui.x)
+            self.gui.xlim_h_last=max(self.gui.x)
+            self.gui.xlim_l_last=min(self.gui.x)
+        else:
+            self.gui.xlim_h_last=0
+            self.gui.xlim_l_last=0
 
         self.gui.knots_x = np.array([])
         self.gui.knots_y = np.array([])
@@ -348,8 +351,9 @@ class start(QObject):
             self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
-        self.on_reset_pressed()
         self.make_fig(0)
+        self.on_reset_pressed()
+ 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
