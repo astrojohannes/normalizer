@@ -336,7 +336,7 @@ class start(QObject):
         else:
             mydir = QDir.currentPath()
 
-        filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("(*.fits)"))
+        filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("*.fits"))
  
         if filename == '':
             # cancel was clicked
@@ -363,7 +363,12 @@ class start(QObject):
         filename,_ = QFileDialog.getSaveFileName(None,'Save to FITS', self.tr("(*.fits)"))
         """
         if len(self.gui.x) > 0:
-            filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'-'+str(int(self.gui.xlim_h_last))+'.fits'
+            file_basename = os.path.basename(self.gui.lbl_fname.text())
+            # Split the filename and extension
+            file_name_without_extension, file_extension = os.path.splitext(file_basename)
+
+            filename = f"{file_name_without_extension}_{str(int(self.gui.xlim_l_last))}-{str(int(self.gui.xlim_h_last))}.fits"
+            #filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'-'+str(int(self.gui.xlim_h_last))+'.fits'
             self.gui.lbl_fname2.setText(filename)
             self.writefits(filename)
 
