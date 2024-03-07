@@ -81,7 +81,7 @@ class start(QObject):
         self.plotwindow.custom_toolbar.slicePressed.connect(self.on_slice_pressed)
         self.plotwindow.custom_toolbar.resetPressed.connect(self.on_reset_pressed)
         self.plotwindow.custom_toolbar.homePressed.connect(self.on_home_pressed)
-        self.plotwindow.coordinatesSelected.connect(self.on_coordinates_selected)
+        self.plotwindow.custom_toolbar.rectangleSelected.connect(self.on_coordinates_selected)
 
         self.gui.fig = self.plotwindow.figure  # Use the Figure from PlotWindow 
         self.gui.ax = self.plotwindow.ax  # Use the Axes from PlotWindow
@@ -148,6 +148,7 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def on_coordinates_selected(self, x0, y0, x1, y1, flagtype):
+
         #print(f"Coordinates selected: ({x0}, {y0}) to ({x1}, {y1})")
         tellurics = self.gui.lineEdit_telluric.text()
         x0_user = round(x0,2)
@@ -226,15 +227,12 @@ class start(QObject):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def on_slice_pressed(self):
+
         xlim_l=float(self.gui.ax[0].get_xlim()[0])
         xlim_h=float(self.gui.ax[0].get_xlim()[1])
 
         # Conditions to get the indices within the desired limits
         indices = (self.gui.xcurrent >= xlim_l) & (self.gui.xcurrent <= xlim_h)
-
-        # user has zoomed in
-        #if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
-
 
         self.gui.xcurrent=self.gui.xcurrent[indices]
         self.gui.ycurrent=self.gui.ycurrent[indices]

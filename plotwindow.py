@@ -4,6 +4,7 @@ from PyQt5.QtCore import pyqtSignal, Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from matplotlib.widgets import RectangleSelector
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -11,11 +12,12 @@ class CustomToolbar(NavigationToolbar):
     slicePressed = pyqtSignal()
     resetPressed = pyqtSignal()
     homePressed = pyqtSignal()
+    rectangleSelected = pyqtSignal(float, float, float, float, str)
 
-    def __init__(self, canvas, parent, coordinates_callback):
-        super().__init__(canvas, parent, coordinates_callback)
+    def __init__(self, canvas, parent, ax):
+        super().__init__(canvas, parent)
 
-        self.coordinates_callback = coordinates_callback
+        self.ax = ax 
 
         ##### Slice action
         # define new button/action to slice spectrum based on current view
@@ -90,77 +92,112 @@ class CustomToolbar(NavigationToolbar):
         self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
         self.unflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
 
+    #########################################################################################
+
+    def deactivate_rectangle_selector(self):
+        # General method to deactivate any existing rectangle selectors.
+        if hasattr(self, 'rectangle_selector_unflag'):
+            self.rectangle_selector_unflag.set_active(False)
+        if hasattr(self, 'rectangle_selector_bad'):
+            self.rectangle_selector_bad.set_active(False)
+        if hasattr(self, 'rectangle_selector_line'):
+            self.rectangle_selector_line.set_active(False)
+        # Remove any existing rectangle by redrawing without it.
+        self.canvas.draw_idle()
+
 
     def activate_rectangle_selection_unflag(self):
         self.deactivate_zoom_pan()
-
         self.flagtype = 'UNFLAG'
+        current_ax = self.ax[0]
 
-        # Connect the mouse press and release events to custom handlers
-        self.canvas.mpl_connect('button_press_event', self.on_press)
-        self.canvas.mpl_connect('button_release_event', self.on_release)
+        # Disconnect existing events to avoid conflicts
+        self.deactivate_rectangle_selector()
 
-        # Before activating the rectangle selection, you might want to change the button style to indicate the mode is active
+        # Create a new RectangleSelector and attach it to the current axes
+        self.rectangle_selector_unflag = RectangleSelector(
+            current_ax, self.on_select_rectangle,
+            useblit=False, button=[1],  # Only left mouse button
+            minspanx=5, minspany=5, spancoords='pixels',
+            props={'alpha':0.2, 'facecolor':'blue'},
+            interactive=True)
+
+        # Update button styles and cursor.
         self.unflag_button.setStyleSheet("background-color: blue;")  # Change color to indicate active selection mode
- 
-        # Change cursor to crosshair
         self.canvas.setCursor(Qt.CrossCursor)
+
+    #########################################################################################
 
     def activate_rectangle_selection_bad(self):
         self.deactivate_zoom_pan()
 
         self.flagtype = 'BAD'
+        current_ax = self.ax[0]
 
-        # Connect the mouse press and release events to custom handlers
-        self.canvas.mpl_connect('button_press_event', self.on_press)
-        self.canvas.mpl_connect('button_release_event', self.on_release)
+        # Disconnect existing events to avoid conflicts
+        self.deactivate_rectangle_selector()
 
-        # Before activating the rectangle selection, you might want to change the button style to indicate the mode is active
+        # Create a new RectangleSelector and attach it to the current axes
+        self.rectangle_selector_bad = RectangleSelector(
+            current_ax, self.on_select_rectangle,
+            useblit=False, button=[1],  # Only left mouse button
+            minspanx=5, minspany=5, spancoords='pixels',
+            props={'alpha':0.2, 'facecolor':'red'},
+            interactive=True)
+
+        # Update button styles and cursor.
         self.badflag_button.setStyleSheet("background-color: red;")  # Change color to indicate active selection mode
- 
-        # Change cursor to crosshair
         self.canvas.setCursor(Qt.CrossCursor)
 
     def activate_rectangle_selection_line(self):
         self.deactivate_zoom_pan()
 
         self.flagtype = 'LINE'
+        current_ax = self.ax[0]
 
-        # Connect the mouse press and release events to custom handlers
-        self.canvas.mpl_connect('button_press_event', self.on_press)
-        self.canvas.mpl_connect('button_release_event', self.on_release)
+        # Disconnect existing events to avoid conflicts
+        self.deactivate_rectangle_selector()
 
-        # Before activating the rectangle selection, you might want to change the button style to indicate the mode is active
-        self.lineflag_button.setStyleSheet("background-color: #ccc;")  # Change color to indicate active selection mode
- 
-        # Change cursor to crosshair
+        # Create a new RectangleSelector and attach it to the current axes
+        self.rectangle_selector_line = RectangleSelector(
+            current_ax, self.on_select_rectangle,
+            useblit=False, button=[1],  # Only left mouse button
+            minspanx=5, minspany=5, spancoords='pixels',
+            props={'alpha':0.2, 'facecolor':'#a0a0a0'},
+            interactive=True)
+
+        # Update button styles and cursor.
+        self.lineflag_button.setStyleSheet("background-color: #eee;")  # Change color to indicate active selection mode
         self.canvas.setCursor(Qt.CrossCursor)
 
-    def on_press(self, event):
-        # Record the start point (x0, y0)
-        self.x0, self.y0 = event.xdata, event.ydata
-        
+    #########################################################################################
 
-    def on_release(self, event):
-        # Record the end point (x1, y1) and trigger the user-defined action
-        self.x1, self.y1 = event.xdata, event.ydata
-        # Ensure the starting and ending points are defined
-        if None not in (self.x0, self.y0, self.x1, self.y1):
-            self.coordinates_callback(self.x0, self.y0, self.x1, self.y1, self.flagtype)
-        # Disconnect the events after selection to prevent multiple connections
-        self.canvas.mpl_disconnect(self.canvas.callbacks.connect('button_press_event', self.on_press))
-        self.canvas.mpl_disconnect(self.canvas.callbacks.connect('button_release_event', self.on_release))
+    # Add this new method to handle rectangle selection
+    def on_select_rectangle(self, eclick, erelease):
+        # Coordinates of the rectangle's corners
+        self.x0, self.y0 = eclick.xdata, eclick.ydata
+        self.x1, self.y1 = erelease.xdata, erelease.ydata
 
-        # Reset cursor back to default
+        # Emit the signal and transport coordinates and flagtype
+        self.rectangleSelected.emit(self.x0, self.y0, self.x1, self.y1, self.flagtype)
+
+        # Reset button styles and disconnect selector after drawing the rectangle
+        self.reset_button_styles()
+        self.deactivate_rectangle_selector()
+
+    def reset_button_styles(self):
+        # Reset the styles of all buttons to indicate that selection mode is off
+        self.unflag_button.setStyleSheet("background-color: #a0a0a0;")
+        self.badflag_button.setStyleSheet("background-color: #a0a0a0;")
+        self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")
         self.canvas.unsetCursor()
+        self.canvas.draw_idle()
 
-        self.badflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
-        self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
-        self.unflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+
+    #########################################################################################
 
 
 class PlotWindow(QMainWindow):
-    coordinatesSelected = pyqtSignal(float, float, float, float, str) 
 
     def __init__(self):
         super().__init__()
@@ -175,12 +212,12 @@ class PlotWindow(QMainWindow):
         self.canvas = FigureCanvas(self.figure)
         self.layout.addWidget(self.canvas)
 
-        # Custom toolbar with a new button
-        self.custom_toolbar = CustomToolbar(self.canvas, self, self.user_flagging)
-        self.addToolBar(self.custom_toolbar)
-
         # Give access to Figure and Axes
         self.ax = self.init_plot()
+
+        # Custom toolbar with a new button
+        self.custom_toolbar = CustomToolbar(self.canvas, self, self.ax)
+        self.addToolBar(self.custom_toolbar)
 
     def init_plot(self):
         ax = [None,None]
@@ -189,5 +226,3 @@ class PlotWindow(QMainWindow):
         self.canvas.draw()
         return ax
 
-    def user_flagging(self, x0, y0, x1, y1, flagtype):
-        self.coordinatesSelected.emit(x0, y0, x1, y1, flagtype)
