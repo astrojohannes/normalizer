@@ -6,7 +6,7 @@ The *normalizer* is an interactive 1D spectrum normalizer tool. It comes with tw
 ## Requirements
 First of all, make sure to have **Python 3.X** and all other requirements installed. Currently, these are:
 
-astropy (5.2.2), matplotlib (3.7.1), numpy (1.24.3), PyQt5 (5.15.9), PyQt5_sip (12.11.1), SciPy (1.8.1)
+astropy (5.2.2), matplotlib (3.7.4), numpy (1.24.4), pandas (1.5.3), PyAstronomy (0.21.0), PyQt5 (5.15.10), PyQt5_sip (12.11.1), SciPy (1.10.1)
 
 The numbers in brackets indicate module versions used during development. Earlier/later versions may work as well.
 
