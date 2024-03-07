@@ -52,7 +52,7 @@ class TableWidget(QTableWidget):
         else:
             super().keyPressEvent(event)
 
-class start(QObject):
+class start(QMainWindow):
 
     def __init__(self, ui_file, parent=None):
 
@@ -61,7 +61,7 @@ class start(QObject):
 
         super(start, self).__init__(parent)
        
-        self.gui = QMainWindow() 
+        self.gui = self     # this has historic reasons....
         loadUi(ui_file, self.gui)
 
         if not self.gui:
@@ -144,6 +144,10 @@ class start(QObject):
 
         # Apply the font to the table
         table.setFont(font)
+
+    def closeEvent(self, event):
+        # Close the plotwindow when the main window is about to close
+        self.plotwindow.close()
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -916,12 +920,15 @@ class start(QObject):
                 yi=scalingfactor*np.copy(spl(x)).flatten()
    
             if self.gui.lineEdit_offset.text().strip()=='':
-                offs = 0.0
+                offs = 1.0
             else:
-                offs = float(self.gui.lineEdit_offset.text())
+                try:
+                    offs = float(self.gui.lineEdit_offset.text())
+                except:
+                    offs = 1.0
 
             ynorm = np.divide(y, np.array(yi), where=np.array(yi) != 0)
-            ynorm *= offs
+            ynorm *= 1.0/offs
 
             self.gui.yi = np.array(yi)
  
