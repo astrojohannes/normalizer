@@ -86,6 +86,11 @@ class CustomToolbar(NavigationToolbar):
         if self._actions['pan'].isChecked():
             self.pan()
 
+        self.badflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+        self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+        self.unflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+
+
     def activate_rectangle_selection_unflag(self):
         self.deactivate_zoom_pan()
 

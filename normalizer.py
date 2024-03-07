@@ -150,8 +150,15 @@ class start(QObject):
     def on_coordinates_selected(self, x0, y0, x1, y1, flagtype):
         #print(f"Coordinates selected: ({x0}, {y0}) to ({x1}, {y1})")
         tellurics = self.gui.lineEdit_telluric.text()
-        x0 = round(x0,2)
-        x1 = round(x1,2)
+        x0_user = round(x0,2)
+        x1_user = round(x1,2)
+
+        if x0_user > x1_user:
+            x0 = x1_user
+            x1 = x0_user
+        else:
+            x0 = x0_user
+            x1 = x1_user
 
         if flagtype=='BAD':
             self.gui.lineEdit_telluric.setText(f"{tellurics}, ({x0},{x1})")
@@ -177,33 +184,38 @@ class start(QObject):
             # unflag tellurics
             # Parse the intervals from the telluric line edit
             # and shift to the observed scale
-            telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text())
-            lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
-            telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+            if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
+                telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text().strip().strip(','))
+                lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
 
-            # Filter and adjust the intervals based on the user selection
-            updated_intervals = []
-            for a, b in telluric_intervals:
-                if b <= x0 or a >= x1:
-                    # Interval is completely outside user selection, keep it as is
-                    updated_intervals.append((a, b))
-                elif a < x0 and b > x1:
-                    # User selection is completely within the interval, split it into two
-                    updated_intervals.append((a, x0))
-                    updated_intervals.append((x1, b))
-                elif a < x0 <= b:
-                    # Only the upper part of the interval overlaps with user selection
-                    updated_intervals.append((a, x0))
-                elif a >= x0 and b > x1:
-                    # Only the lower part of the interval overlaps with user selection
-                    updated_intervals.append((x1, b))
-                # If the interval is entirely within the user selection, it gets removed (no action required)
+                if self.is_iterable(telluric_intervals[0]):
+                    telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+                else:
+                    telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
 
-            # Convert the updated intervals back to string format for the line edit
-            updated_intervals_str = str(updated_intervals).replace(' ', '').replace('[','').replace(']','')  # Format it to match the original input format
+                # Filter and adjust the intervals based on the user selection
+                updated_intervals = []
+                for a, b in telluric_intervals:
+                    if b <= x0 or a >= x1:
+                        # Interval is completely outside user selection, keep it as is
+                        updated_intervals.append((a, b))
+                    elif a < x0 and b > x1:
+                        # User selection is completely within the interval, split it into two
+                        updated_intervals.append((a, x0))
+                        updated_intervals.append((x1, b))
+                    elif a < x0 <= b:
+                        # Only the upper part of the interval overlaps with user selection
+                        updated_intervals.append((a, x0))
+                    elif a >= x0 and b > x1:
+                        # Only the lower part of the interval overlaps with user selection
+                        updated_intervals.append((x1, b))
+                    # If the interval is entirely within the user selection, it gets removed (no action required)
 
-            # Set the updated string back to the QLineEdit
-            self.gui.lineEdit_telluric.setText(updated_intervals_str)
+                # Convert the updated intervals back to string format for the line edit
+                updated_intervals_str = str(updated_intervals).replace(' ', '').replace('[','').replace(']','')  # Format it to match the original input format
+
+                # Set the updated string back to the QLineEdit
+                self.gui.lineEdit_telluric.setText(updated_intervals_str)
         else:
             print("Flag type unknown.")
 
@@ -218,29 +230,31 @@ class start(QObject):
         xlim_h=float(self.gui.ax[0].get_xlim()[1])
 
         # Conditions to get the indices within the desired limits
-        indices = (self.gui.x >= xlim_l) & (self.gui.x <= xlim_h)
+        indices = (self.gui.xcurrent >= xlim_l) & (self.gui.xcurrent <= xlim_h)
 
         # user has zoomed in
-        if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
-            self.gui.xcurrent=self.gui.x[indices]
-            self.gui.ycurrent=self.gui.y[indices]
+        #if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
 
-            self.gui.xlim_l_last=xlim_l
-            self.gui.xlim_h_last=xlim_h
+
+        self.gui.xcurrent=self.gui.xcurrent[indices]
+        self.gui.ycurrent=self.gui.ycurrent[indices]
+
+        self.gui.xlim_l_last=xlim_l
+        self.gui.xlim_h_last=xlim_h
             
-            # remove fit
-            self.gui.yi=np.array([])
-            self.gui.ynorm = np.array([])
-            self.gui.ynormcurrent=np.array([])
-            self.gui.knots_x = np.array([])
-            self.gui.knots_y = np.array([])
+        # remove fit
+        self.gui.yi=np.array([])
+        self.gui.ynorm = np.array([])
+        self.gui.ynormcurrent=np.array([])
+        self.gui.knots_x = np.array([])
+        self.gui.knots_y = np.array([])
 
-            # preserve masks
-            if len(self.gui.telluricmask)>0: self.gui.telluricmask=self.gui.telluricmask[indices]
-            if len(self.gui.mask)>0: self.gui.mask=self.gui.mask[indices]
-            if len(self.gui.ymaskedcurrent)>0: self.gui.ymaskedcurrent[indices]
+        # preserve masks
+        if len(self.gui.telluricmask)>0: self.gui.telluricmask=self.gui.telluricmask[indices]
+        if len(self.gui.mask)>0: self.gui.mask=self.gui.mask[indices]
+        if len(self.gui.ymaskedcurrent)>0: self.gui.ymaskedcurrent[indices]
 
-            self.fit_spline(showfit=True)
+        self.fit_spline(showfit=True)
 
  
 
@@ -269,6 +283,11 @@ class start(QObject):
 
         self.gui.ax[0].cla()
         self.gui.ax[1].cla()
+
+        # Standard telluric absorption bands
+        telluric_intervals = self.find_telluric_intervals("skycalc_molec_abs.txt")
+        self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
+        self.gui.lineEdit_telluric_vrad.setText('0.0')
 
         self.make_fig(0)
 
@@ -441,22 +460,45 @@ class start(QObject):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def is_iterable(self,obj):
+        try:
+            iter(obj)
+            return True
+        except TypeError:
+            return False
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def fix_telluric_intervals_notalist(self, telluric_intervals):
+        telluric_intervals = [list(telluric_intervals)]
+        telluric_intervals.append([0.0001,0.0002] )
+
+        return telluric_intervals
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def create_telluric_mask(self):
 
-        # Parse the intervals from the telluric line edit
-        # and shift to the observed scale
-        telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text())
-        lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
-        telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+        if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
 
-        # Initialize new array for telluric mask
-        self.gui.telluricmask = np.full_like(self.gui.xcurrent, 1)
+            # Initialize new array for telluric mask
+            self.gui.telluricmask = np.full_like(self.gui.xcurrent, 1)
+            
+            # Parse the intervals from the telluric line edit
+            # and shift to the observed scale
+            telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text().strip().strip(','))
+            lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
+            if self.is_iterable(telluric_intervals[0]):
+                telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+            else:
+                telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
 
-        # Set values enclosed by intervals to 0
-        for a, b in telluric_intervals:
-            self.gui.telluricmask[(self.gui.xcurrent >= a) & (self.gui.xcurrent <= b)] = 0
+            for a, b in telluric_intervals:
+                self.gui.telluricmask[(self.gui.xcurrent >= a) & (self.gui.xcurrent <= b)] = 0
 
-        return self.gui.telluricmask, telluric_intervals
+            return self.gui.telluricmask, telluric_intervals
+        else:
+            self.gui.telluricmask = np.array([])
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -728,10 +770,15 @@ class start(QObject):
         # plot telluric regions
         if figid == 0 and showfit:
 
-            _, telluric_intervals = self.create_telluric_mask()
+            if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
 
-            for start, end in telluric_intervals:
-                ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3, label='telluric')
+                _, telluric_intervals = self.create_telluric_mask()
+
+                if not self.is_iterable(telluric_intervals[0]):
+                    telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
+
+                for start, end in telluric_intervals:
+                    ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3, label='telluric')
 
         ax[1].set_xlabel('wavelength [AA]')
         
@@ -788,7 +835,14 @@ class start(QObject):
 
         if len(self.gui.xcurrent)>1:
 
+            # update telluric mask
+            self.create_telluric_mask()
+
+            # apply both, telluric and line mask --> updates ymaskedcurrent
             self.apply_mask()
+
+            ##############
+            # FITTING part
             x, y = self.gui.xcurrent, self.gui.ycurrent
 
             xlim_l=float(self.gui.ax[0].get_xlim()[0])
@@ -976,8 +1030,13 @@ class start(QObject):
             x = np.copy(self.gui.xcurrent)
             y = np.copy(self.gui.ynormcurrent)
 
-            xfit = x[self.gui.telluricmask != 0]
-            yfit = y[self.gui.telluricmask != 0]
+
+            if len(self.gui.telluricmask)>0:
+                xfit = x[self.gui.telluricmask != 0]
+                yfit = y[self.gui.telluricmask != 0]
+            else:
+                xfit = x
+                yfit = y
 
             sigma_high=float(self.gui.lineEdit_sigma_high.text())
             sigma_low=float(self.gui.lineEdit_sigma_low.text())        
@@ -989,7 +1048,8 @@ class start(QObject):
 
                 if np.nansum(new_mask)==0:
                     print(f"Stopping line identification at iteration {i}.")
-                    yfit = yfit_prev
+                    if 'yfit_pref' in locals():
+                        yfit = yfit_prev
                     continue
 
                 yfit_prev = yfit
@@ -1150,7 +1210,6 @@ class start(QObject):
         
         self.gui.mask=np.array([])
         self.fit_spline()
-        #self.gui.tableWidget.clear()
         
         lines = []
         widths = []
