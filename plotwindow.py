@@ -46,6 +46,13 @@ class CustomToolbar(NavigationToolbar):
         self.insertAction(actions[-1], self.reset_action)
 
         #########################
+        # Insert UNFLAG button
+        self.unflag_button = QPushButton('UNFLAG')
+        self.unflag_button.clicked.connect(self.activate_rectangle_selection_unflag)
+        self.unflag_button.setStyleSheet("background-color: #a0a0a0;")
+        self.addWidget(self.unflag_button)
+
+        #########################
         # Insert BAD flag button
         self.badflag_button = QPushButton('Flag BAD')
         self.badflag_button.clicked.connect(self.activate_rectangle_selection_bad)
@@ -72,7 +79,31 @@ class CustomToolbar(NavigationToolbar):
     def reset_spectrum(self):
         self.resetPressed.emit()
 
+    def deactivate_zoom_pan(self):
+        # Deactivate zoom and pan if they are active
+        if self._actions['zoom'].isChecked():
+            self.zoom()
+        if self._actions['pan'].isChecked():
+            self.pan()
+
+    def activate_rectangle_selection_unflag(self):
+        self.deactivate_zoom_pan()
+
+        self.flagtype = 'UNFLAG'
+
+        # Connect the mouse press and release events to custom handlers
+        self.canvas.mpl_connect('button_press_event', self.on_press)
+        self.canvas.mpl_connect('button_release_event', self.on_release)
+
+        # Before activating the rectangle selection, you might want to change the button style to indicate the mode is active
+        self.unflag_button.setStyleSheet("background-color: blue;")  # Change color to indicate active selection mode
+ 
+        # Change cursor to crosshair
+        self.canvas.setCursor(Qt.CrossCursor)
+
     def activate_rectangle_selection_bad(self):
+        self.deactivate_zoom_pan()
+
         self.flagtype = 'BAD'
 
         # Connect the mouse press and release events to custom handlers
@@ -86,6 +117,8 @@ class CustomToolbar(NavigationToolbar):
         self.canvas.setCursor(Qt.CrossCursor)
 
     def activate_rectangle_selection_line(self):
+        self.deactivate_zoom_pan()
+
         self.flagtype = 'LINE'
 
         # Connect the mouse press and release events to custom handlers
@@ -118,6 +151,7 @@ class CustomToolbar(NavigationToolbar):
 
         self.badflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
         self.lineflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
+        self.unflag_button.setStyleSheet("background-color: #a0a0a0;")  # Change color to indicate active selection mode
 
 
 class PlotWindow(QMainWindow):

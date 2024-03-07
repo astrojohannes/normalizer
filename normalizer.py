@@ -155,10 +155,57 @@ class start(QObject):
 
         if flagtype=='BAD':
             self.gui.lineEdit_telluric.setText(f"{tellurics}, ({x0},{x1})")
-        else:
+        elif flagtype=='LINE':
             linewidth = round(0.5*(x1-x0),2)
             linecenter = round(x0 + linewidth,2)
             self.add_values_to_first_empty_row(self.gui.tableWidget, [linecenter, linewidth])
+        elif flagtype=='UNFLAG':
+
+            # unflag line flags:
+            table = self.gui.tableWidget
+            rowCount = table.rowCount()
+            # Iterate through the rows in reverse order
+            for row in range(rowCount - 1, -1, -1):  # Start from the last row
+                # Retrieve the value from the first column of the current row
+                item = table.item(row, 0)  # 0 for the first column
+                if item:  # Check if the item is not None
+                    value = float(item.text())  # or int(item.text()), as appropriate
+                    # Check if the value is between x0 and x1
+                    if x0 <= value <= x1:
+                        table.removeRow(row)  # Delete the row if the condition is met
+
+            # unflag tellurics
+            # Parse the intervals from the telluric line edit
+            # and shift to the observed scale
+            telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text())
+            lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
+            telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+
+            # Filter and adjust the intervals based on the user selection
+            updated_intervals = []
+            for a, b in telluric_intervals:
+                if b <= x0 or a >= x1:
+                    # Interval is completely outside user selection, keep it as is
+                    updated_intervals.append((a, b))
+                elif a < x0 and b > x1:
+                    # User selection is completely within the interval, split it into two
+                    updated_intervals.append((a, x0))
+                    updated_intervals.append((x1, b))
+                elif a < x0 <= b:
+                    # Only the upper part of the interval overlaps with user selection
+                    updated_intervals.append((a, x0))
+                elif a >= x0 and b > x1:
+                    # Only the lower part of the interval overlaps with user selection
+                    updated_intervals.append((x1, b))
+                # If the interval is entirely within the user selection, it gets removed (no action required)
+
+            # Convert the updated intervals back to string format for the line edit
+            updated_intervals_str = str(updated_intervals).replace(' ', '').replace('[','').replace(']','')  # Format it to match the original input format
+
+            # Set the updated string back to the QLineEdit
+            self.gui.lineEdit_telluric.setText(updated_intervals_str)
+        else:
+            print("Flag type unknown.")
 
         self.linetable_mask()
         self.fit_spline()
@@ -170,25 +217,28 @@ class start(QObject):
         xlim_l=float(self.gui.ax[0].get_xlim()[0])
         xlim_h=float(self.gui.ax[0].get_xlim()[1])
 
+        # Conditions to get the indices within the desired limits
+        indices = (self.gui.x >= xlim_l) & (self.gui.x <= xlim_h)
+
         # user has zoomed in
         if abs(xlim_l-self.gui.xlim_l_last)>1 and abs(xlim_h-self.gui.xlim_h_last)>1:
-            self.gui.xcurrent=self.gui.x[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
-            self.gui.ycurrent=self.gui.y[(self.gui.x>=xlim_l) & (self.gui.x<=xlim_h)]
+            self.gui.xcurrent=self.gui.x[indices]
+            self.gui.ycurrent=self.gui.y[indices]
 
             self.gui.xlim_l_last=xlim_l
             self.gui.xlim_h_last=xlim_h
-                
+            
+            # remove fit
             self.gui.yi=np.array([])
-            self.gui.telluricmask=np.array([])
-            self.gui.mask=np.array([])
-
-            self.gui.yi=np.array([])
-            self.gui.ymaskedcurrent=np.array([])
             self.gui.ynorm = np.array([])
             self.gui.ynormcurrent=np.array([])
-
             self.gui.knots_x = np.array([])
             self.gui.knots_y = np.array([])
+
+            # preserve masks
+            if len(self.gui.telluricmask)>0: self.gui.telluricmask=self.gui.telluricmask[indices]
+            if len(self.gui.mask)>0: self.gui.mask=self.gui.mask[indices]
+            if len(self.gui.ymaskedcurrent)>0: self.gui.ymaskedcurrent[indices]
 
             self.fit_spline(showfit=True)
 
@@ -675,10 +725,13 @@ class start(QObject):
         if len(self.gui.yi) > 0 and figid == 0 and showfit:
             ax[0].plot(x, self.gui.yi, color='r', lw=1.5)
 
+        # plot telluric regions
+        if figid == 0 and showfit:
+
             _, telluric_intervals = self.create_telluric_mask()
 
             for start, end in telluric_intervals:
-                ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3)
+                ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3, label='telluric')
 
         ax[1].set_xlabel('wavelength [AA]')
         
@@ -696,7 +749,7 @@ class start(QObject):
                 ylim_l=np.nanmin(self.gui.ycurrent)
                 ylim_h=np.nanmax(self.gui.ycurrent)
                 yy=np.linspace(ylim_l,ylim_h,10)
-                ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3, label='masked region')
+                ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3, label='line')
 
         # plot a horizontal line at 1
         ax[1].axhline(y=1.0, linestyle='--', color='k', lw=2)
@@ -1059,11 +1112,14 @@ class start(QObject):
 
     def apply_mask(self):
 
+        """ combine the flags of line and telluric masks
+            and produce an array self.gui.ymaskedcurrent
+            where all flagged regions are set to NaN
+        """
+
         # Backup original masks
         original_mask = np.copy(self.gui.mask) if len(self.gui.mask) > 0 else None
         original_telluric_mask = np.copy(self.gui.telluricmask) if len(self.gui.telluricmask) > 0 else None
-
-        #_, telluric_intervals = self.create_telluric_mask()  # Assuming this method is accessible
 
         # Apply initial masks to the data
         if original_mask is not None or original_telluric_mask is not None:
@@ -1075,21 +1131,6 @@ class start(QObject):
             self.gui.ymaskedcurrent = np.array(ymasked)
         else:
             self.gui.ymaskedcurrent = np.copy(self.gui.ycurrent)
-
-        """
-        # Helper for nan handling in interpolation
-        nans, x = self.nan_helper(self.gui.ymaskedcurrent)
-        if np.any(~nans):
-            self.gui.ymaskedcurrent[nans]= np.interp(x(nans), x(~nans), self.gui.ymaskedcurrent[~nans])
-        """
-
-        """
-        # Reapply masks after interpolation
-        if original_mask is not None:
-            self.gui.ymaskedcurrent[original_mask] = np.nan
-        if original_telluric_mask is not None:
-            self.gui.ymaskedcurrent[original_telluric_mask == 0] = np.nan
-        """
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
