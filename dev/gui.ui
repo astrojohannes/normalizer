@@ -128,7 +128,7 @@
        <property name="font">
         <font>
          <family>Verdana</family>
-         <pointsize>11</pointsize>
+         <pointsize>8</pointsize>
         </font>
        </property>
        <property name="styleSheet">
@@ -175,7 +175,7 @@
        <property name="font">
         <font>
          <family>Verdana</family>
-         <pointsize>11</pointsize>
+         <pointsize>8</pointsize>
         </font>
        </property>
        <property name="styleSheet">
@@ -346,7 +346,7 @@
          <item>
           <widget class="QLabel" name="label">
            <property name="text">
-            <string>Degree (1 &lt;= k &lt;= 5)</string>
+            <string>Degree (1&lt;=k&lt;=5)</string>
            </property>
           </widget>
          </item>
@@ -2977,19 +2977,6 @@
      </item>
     </layout>
    </widget>
-  </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>660</width>
-     <height>25</height>
-    </rect>
-   </property>
   </widget>
  </widget>
  <resources/>

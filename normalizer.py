@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout, QAction
 from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication
 from PyQt5.uic import loadUi
 from PyQt5.QtGui import QFont
@@ -35,6 +35,7 @@ from scipy.stats import norm
 from mask_peaks import PeakMask
 from exp_mask import exp_mask
 from plotwindow import PlotWindow
+from about import AboutWin
 
 class TableWidget(QTableWidget):
     def __init__(self, *args, **kwargs):
@@ -67,6 +68,24 @@ class start(QMainWindow):
         if not self.gui:
             print(loader.errorString())
             sys.exit(-1)
+
+        # Create the menu bar
+        menubar = self.gui.menuBar()
+
+        # Create 'File' menu and add actions
+        fileMenu = menubar.addMenu('&File')
+        saveAction = QAction('&Save as...', self)
+        exitAction = QAction('&Exit', self)
+        saveAction.triggered.connect(lambda: self.saveFile(showfiledialogue=True))
+        exitAction.triggered.connect(self.close)
+        fileMenu.addAction(saveAction)
+        fileMenu.addAction(exitAction)
+
+        # Create 'Help' menu and add actions
+        helpMenu = menubar.addMenu('&Help')
+        aboutAction = QAction('&About', self)
+        aboutAction.triggered.connect(self.showAboutDialog)
+        helpMenu.addAction(aboutAction)
 
         self.gui.label_8.setHidden(True)
         self.gui.lineEdit_interior_knots.setHidden(True)
@@ -148,6 +167,11 @@ class start(QMainWindow):
     def closeEvent(self, event):
         # Close the plotwindow when the main window is about to close
         self.plotwindow.close()
+
+    def showAboutDialog(self):
+        # Create and show the About dialog
+        dialog = AboutWin(self)
+        dialog.exec_()  # Show the dialog modally
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -361,7 +385,7 @@ class start(QMainWindow):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def saveFile(self):
+    def saveFile(self, showfiledialogue=False):
         """
         if self.gui.lbl_fname.text() is not None and os.path.isfile(self.gui.lbl_fname.text()):
             mydir = os.path.dirname(self.gui.lbl_fname.text())
@@ -371,12 +395,20 @@ class start(QMainWindow):
         filename,_ = QFileDialog.getSaveFileName(None,'Save to FITS', self.tr("(*.fits)"))
         """
         if len(self.gui.x) > 0:
-            file_basename = os.path.basename(self.gui.lbl_fname.text())
-            # Split the filename and extension
-            file_name_without_extension, file_extension = os.path.splitext(file_basename)
+            if showfiledialogue:
+                # Set the options for the dialog
+                options = QFileDialog.Options()
+                filename, _ = QFileDialog.getSaveFileName(self, "QFileDialog.getSaveFileName()", 
+                                                  "", "All Files (*);;Text Files (*.txt)", 
+                                                  options=options)
 
-            filename = f"{file_name_without_extension}_{str(int(self.gui.xlim_l_last))}-{str(int(self.gui.xlim_h_last))}.fits"
-            #filename=str(self.gui.lbl_fname.text().split('.')[0:-1]).replace('[','').replace(']','').replace('\'','')+'_'+str(int(self.gui.xlim_l_last))+'-'+str(int(self.gui.xlim_h_last))+'.fits'
+            else:
+                file_basename = os.path.basename(self.gui.lbl_fname.text())
+                # Split the filename and extension
+                file_name_without_extension, file_extension = os.path.splitext(file_basename)
+
+                filename = f"{file_name_without_extension}_{str(int(self.gui.xlim_l_last))}-{str(int(self.gui.xlim_h_last))}.fits"
+
             self.gui.lbl_fname2.setText(filename)
             self.writefits(filename)
 
