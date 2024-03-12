@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout, QAction
-from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication
+from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication, QEvent
 from PyQt5.uic import loadUi
 from PyQt5.QtGui import QFont
 
@@ -37,21 +37,24 @@ from exp_mask import exp_mask
 from plotwindow import PlotWindow
 from about import AboutWin
 
-class TableWidget(QTableWidget):
-    def __init__(self, *args, **kwargs):
-        super(TableWidget, self).__init__(*args, **kwargs)
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Delete:
-            selected = self.selectionModel().selectedRows()
-            for row in selected:
-                row = row.row()
-                for col in range(self.columnCount()):
-                    item = self.item(row, col)
-                    if item is not None:  # Check if item is valid
-                        item.setText('')
-        else:
-            super().keyPressEvent(event)
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+# TableWidget event filter function
+def table_key_press_event_filter(obj, event):
+    if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Delete:
+        # Get all selected items
+        selectedItems = obj.selectedItems()
+
+        # Clear the content of each selected item
+        for item in selectedItems:
+            item.setText('')  # Set the text of the item to an empty string
+
+        return True  # Indicate that the event has been handled
+    return False  # Pass other events to the base class
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
 
 class start(QMainWindow):
 
@@ -110,8 +113,8 @@ class start(QMainWindow):
         
         self.gui.lineEdit_degree.setText('3')
         self.gui.lineEdit_smooth.setText('200')
-        self.gui.lineEdit_sigma_high.setText('3.0')
-        self.gui.lineEdit_sigma_low.setText('2.0')
+        self.gui.lineEdit_sigma_high.setText('10.0')
+        self.gui.lineEdit_sigma_low.setText('3.0')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
         self.gui.lineEdit_offset.setText('1.0')
@@ -120,7 +123,8 @@ class start(QMainWindow):
         self.gui.lineEdit_auto_velocity_shift_lim2.setText('50')
         self.gui.rv=0.0
         self.gui.rv_err=0.0
-        
+        self.snr = None
+ 
         self.gui.x=np.array([])     # origianl wavelength range
         self.gui.y=np.array([])     # original spectrum
 
@@ -164,6 +168,9 @@ class start(QMainWindow):
         # Apply the font to the table
         table.setFont(font)
 
+        # Install the event filter for the table
+        self.gui.tableWidget.installEventFilter(self)
+
     def closeEvent(self, event):
         # Close the plotwindow when the main window is about to close
         self.plotwindow.close()
@@ -174,6 +181,14 @@ class start(QMainWindow):
         dialog.exec_()  # Show the dialog modally
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def eventFilter(self, obj, event):
+        if obj == self.tableWidget:
+            return table_key_press_event_filter(obj, event)
+        return super().eventFilter(obj, event)
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
 
     def on_coordinates_selected(self, x0, y0, x1, y1, flagtype):
 
@@ -661,12 +676,21 @@ class start(QMainWindow):
             hdr = fits.Header()
 
         # detect spikes at edges
-        #start, end = self.remove_spikes(y)
+        start, end = self.remove_spikes(y)
 
         # check for constant flux at edges and truncate
         _, start_idx, end_idx = self.truncate_constant_edges(y, 5)
         x = x[start_idx:end_idx]
         y = y[start_idx:end_idx]
+
+        # remove nans
+        nan_indices_x = np.isnan(x)
+        x = x[~nan_indices_x]
+        y = y[~nan_indices_x]
+
+        nan_indices_y = np.isnan(y)
+        x = x[~nan_indices_y]
+        y = y[~nan_indices_y]
 
         # Save re-usable quantities in global variables
         self.gui.x = x
@@ -1087,13 +1111,12 @@ class start(QMainWindow):
             sigma_high=float(self.gui.lineEdit_sigma_high.text())
             sigma_low=float(self.gui.lineEdit_sigma_low.text())        
 
-            # do several iterations to improve masks
-            iters=10
+            iters=1     # we do several iterations in PeakMask, so this is left from previous versions
             new_mask=np.array([True for x in yfit])
             for i in range(iters):
 
                 if np.nansum(new_mask)==0:
-                    print(f"Stopping line identification at iteration {i}.")
+                    print(f"Stopping line identification early.")
                     if 'yfit_pref' in locals():
                         yfit = yfit_prev
                     continue
@@ -1103,7 +1126,7 @@ class start(QMainWindow):
                 # Fit a 3rd degree polynomial to the data during first 2 iterations
                 # else do first degree
                 if i<2:
-                    coefficients = np.polyfit(xfit, yfit, 3)
+                    coefficients = np.polyfit(xfit, yfit, 1)    # just skipt to 1st degree for the moment
                 else:
                     coefficients = np.polyfit(xfit, yfit, 1) 
 
@@ -1117,13 +1140,19 @@ class start(QMainWindow):
                 normed_y = self.gui.ynormcurrent / fitted_y
 
                 try:
-                    masker_high = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_high, rms_tolerance=0.1)
-                    masker_low = PeakMask(normed_y, sigma_smooth=2, sigma_threshold=sigma_low, rms_tolerance=0.1)
+                    masker_high = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_high, rms_tolerance=0.1, maxnumber_iterations=1)
+                    masker_low = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_low, rms_tolerance=0.1, maxnumber_iterations=1)
+
+                    mask_high, iter_high, rms_high = masker_high.create_mask()
+                    mask_low, iter_low, rms_low = masker_low.create_mask()
+
+                    self.snr = round(1/(0.5*((rms_high+rms_low))),1)
+
+                    print(f"Peak-finder performed {iter_high}/{iter_low} iterations for high/low mask. SNR: {self.snr}")
  
-                    mask_high = masker_high.create_mask()
-                    mask_low = masker_low.create_mask()
-                except:
-                    print(f"PeakMask failure in line identification iteration no {i}.")
+                except Exception as e:
+                    print(f"PeakMask failure in line identification:\n{e}")
+                    self.snr = None
                     continue
 
                 mask_high[self.gui.telluricmask==0] = False
@@ -1131,9 +1160,11 @@ class start(QMainWindow):
 
                 try:
                     new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
-                    new_mask = np.array(exp_mask(new_mask, radius=6, keep_mask=True, quiet=True),dtype=bool)
-                except:
-                    print(f"Exp_mask failure in line identification iteration no {i}.")
+                    # grow mask by user input
+                    #new_mask = np.array(exp_mask(new_mask, radius=1, keep_mask=True, quiet=True),dtype=bool)
+                except Exception as e:
+                    print(f"Exp_mask failure in line identification:\n{e}")
+                    self.snr = None
                     continue
 
                 new_mask[self.gui.telluricmask==0] = False
@@ -1148,15 +1179,16 @@ class start(QMainWindow):
                 indices_false = np.where(~new_mask)[0]
 
                 # Interpolate y values at positions where new_mask is True
-                y[new_mask] = np.interp(x_values[new_mask], x_values[~new_mask], y[~new_mask])
+                try:
+                    y[new_mask] = np.interp(x_values[new_mask], x_values[~new_mask], y[~new_mask])
+                    if len(new_mask)>0:
+                        self.gui.mask=new_mask
+                except Exception as e:
+                    print(f"{e}")
 
-                xfit = x[new_mask != 0]
-                yfit = y[new_mask != 0]
- 
+                # xfit = x[new_mask != 0] # not needed anymore, since we perform no looping
+                # yfit = y[new_mask != 0]
                 
-            if len(new_mask)>0:
-               self.gui.mask=new_mask
-
             self.fit_spline(showfit=True)
 
 
