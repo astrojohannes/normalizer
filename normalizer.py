@@ -74,6 +74,7 @@ class start(QMainWindow):
 
         # Create the menu bar
         menubar = self.gui.menuBar()
+	menubar.setNativeMenuBar(True)
 
         # Create 'File' menu and add actions
         fileMenu = menubar.addMenu('&File')
