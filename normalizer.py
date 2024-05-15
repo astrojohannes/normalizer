@@ -74,7 +74,7 @@ class start(QMainWindow):
 
         # Create the menu bar
         menubar = self.gui.menuBar()
-	menubar.setNativeMenuBar(True)
+        menubar.setNativeMenuBar(True)
 
         # Create 'File' menu and add actions
         fileMenu = menubar.addMenu('&File')
@@ -827,9 +827,9 @@ class start(QMainWindow):
         ax[figid].step(x, y, color=col[figid], lw=0.8)
 
         if figid == 0:
-            ax[0].text(0.03, 0.9, 'Original', fontsize=20, transform=ax[0].transAxes)
+            ax[0].text(0.03, 0.1, 'Original', fontsize=20, transform=ax[0].transAxes)
         elif figid == 1:
-            ax[1].text(0.03, 0.9, 'Normalized', fontsize=20, transform=ax[1].transAxes)
+            ax[1].text(0.03, 0.1, 'Normalized', fontsize=20, transform=ax[1].transAxes)
 
         # Plot continuum fit in figure 0
         if len(self.gui.yi) > 0 and figid == 0 and showfit:
