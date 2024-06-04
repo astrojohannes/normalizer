@@ -592,7 +592,7 @@ class start(QMainWindow):
         self.gui.ax[1].cla()
     
         # Read the input file
-        if fitsfile.lower().endswith('.fits') or fitsfile.lower().endswith('.fit'):
+        if fitsfile.lower().endswith('.fits') or fitsfile.lower().endswith('.fit') or fitsfile.lower().endswith('.tfit') or fitsfile.lower().endswith('.tfits'):
             # If the input file is a FITS file, read it using Astropy's fits module
             hdus = fits.open(fitsfile)
             # Check if a BinTableHDU exists in the list of HDUs
@@ -605,15 +605,31 @@ class start(QMainWindow):
             if binary_table_hdu is not None:
                 available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
                 
-                # Check if 'Wavelength' and 'Normalized_Flux' columns are available
-                if 'Wavelength' in available_cols and 'Normalized_Flux' in available_cols:
-                    x = binary_table_hdu.data['Wavelength'].ravel()
-                    y = binary_table_hdu.data['Normalized_Flux'].ravel()
+                # Check if 'Wavelength', 'Normalized_Flux' or 'Flux' columns are available
+                columnsnotfound = False
+                if 'wavelength' in available_cols: tablename_wave = 'wavelength'
+                elif 'Wavelength' in available_cols: tablename_wave = 'Wavelength'
+                elif 'wave' in available_cols: tablename_wave = 'wave'
+                elif 'Wave' in available_cols: tablename_wave = 'Wave'
+                else:
+                    print("The expected columns 'Wavelength' or 'Wave' are not available.")
+                    print("Available columns are: ", available_cols)
+                    columnsnotfound = True
+
+                if 'normalized_flux' in available_cols: tablename_flux = 'normalized_flux'
+                elif 'Normalized_Flux' in available_cols: tablename_flux = 'Normalized_Flux'
+                elif 'flux' in available_cols: tablename_flux = 'flux'
+                elif 'Flux' in available_cols: tablename_flux = 'Flux'
+                else:
+                    print("The expected columns 'Flux' or 'Normalized_Flux' are not available.")
+                    print("Available columns are: ", available_cols)
+                    columnsnotfound = True
+
+                if not columnsnotfound:
+                    x = binary_table_hdu.data[tablename_wave].ravel()
+                    y = binary_table_hdu.data[tablename_flux].ravel()
                     hdr = binary_table_hdu.header
                 else:
-                    print("The expected columns 'Wavelength' and/or 'Normalized_Flux' are not available.")
-                    print("Available columns are: ", available_cols)
-                    
                     # Let user select columns
                     x_col = input("Please enter the column name to use as Wavelength: ")
                     while x_col not in available_cols:
