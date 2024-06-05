@@ -606,48 +606,64 @@ class start(QMainWindow):
                 available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
                 
                 # Check if 'Wavelength', 'Normalized_Flux' or 'Flux' columns are available
-                columnsnotfound = False
+                wavecolumnnotfound = False
                 if 'wavelength' in available_cols: tablename_wave = 'wavelength'
                 elif 'Wavelength' in available_cols: tablename_wave = 'Wavelength'
                 elif 'wave' in available_cols: tablename_wave = 'wave'
                 elif 'Wave' in available_cols: tablename_wave = 'Wave'
+                elif 'WAVE' in available_cols: tablename_wave = 'WAVE'
+                elif 'WAVELENGTH' in available_cols: tablename_wave = 'WAVELENGTH'
                 else:
-                    print("The expected columns 'Wavelength' or 'Wave' are not available.")
-                    print("Available columns are: ", available_cols)
-                    columnsnotfound = True
+                    wavecolumnnotfound = True
 
+                fluxcolumnnotfound = False
                 if 'normalized_flux' in available_cols: tablename_flux = 'normalized_flux'
                 elif 'Normalized_Flux' in available_cols: tablename_flux = 'Normalized_Flux'
                 elif 'flux' in available_cols: tablename_flux = 'flux'
                 elif 'Flux' in available_cols: tablename_flux = 'Flux'
+                elif 'FLUX' in available_cols: tablename_flux = 'FLUX'
+                elif 'NORMALIZED_FLUX' in available_cols: tablename_flux = 'NORMALIZED_FLUX'
                 else:
-                    print("The expected columns 'Flux' or 'Normalized_Flux' are not available.")
-                    print("Available columns are: ", available_cols)
-                    columnsnotfound = True
+                    fluxcolumnnotfound = True
 
-                if not columnsnotfound:
+                if not wavecolumnnotfound and not fluxcolumnnotfound:
                     x = binary_table_hdu.data[tablename_wave].ravel()
                     y = binary_table_hdu.data[tablename_flux].ravel()
                     hdr = binary_table_hdu.header
                 else:
-                    # Let user select columns
-                    x_col = input("Please enter the column name to use as Wavelength: ")
-                    while x_col not in available_cols:
-                        print(f"{x_col} is not a valid column name. Please enter a valid column name for Wavelength: ")
-                        x_col = input()
-                    
-                    y_col = input("Please enter the column name to use as Normalized_Flux: ")
-                    while y_col not in available_cols or y_col == x_col:
-                        if y_col == x_col:
-                            print(f"{y_col} is already used as Wavelength. Please enter a different column name for Normalized_Flux: ")
-                        else:
-                            print(f"{y_col} is not a valid column name. Please enter a valid column name for Normalized_Flux: ")
-                        y_col = input()
-                    
-                    x = binary_table_hdu.data[x_col].ravel()
-                    y = binary_table_hdu.data[y_col].ravel()
-                    hdr = binary_table_hdu.header
+                    # check primary header for WSTART, WEND and DELTA_W
+                    current_header = hdus[0].header
+                    if all(key in current_header for key in ['WSTART', 'WEND', 'DELTA_W', 'N_PIXELS']) and fluxcolumnnotfound == False and wavecolumnnotfound == True:
+                        wstart = float(current_header['WSTART'])
+                        delta_w = float(current_header['DELTA_W'])
+                        n_pix = int(current_header['N_PIXELS'])
 
+                        # Calculate the wavelengths
+                        new_wave = [wstart + int(i) * delta_w for i in range(n_pix)]
+
+                        x = np.array(new_wave,dtype=np.float64)
+                        y = np.array(binary_table_hdu.data[tablename_flux].ravel(),dtype=np.float64)
+                        hdr = binary_table_hdu.header
+                    else:
+                        # Let user select columns
+                        print("At least one of the expected columns 'Wave', 'Wavelength', 'Flux' or 'Normalized_Flux' are not available.")
+                        print("Available columns are: ", available_cols)
+                        x_col = input("Please enter the column name to use as Wavelength: ")
+                        while x_col not in available_cols:
+                            print(f"{x_col} is not a valid column name. Please enter a valid column name for Wavelength: ")
+                            x_col = input()
+                    
+                        y_col = input("Please enter the column name to use as Normalized_Flux: ")
+                        while y_col not in available_cols or y_col == x_col:
+                            if y_col == x_col:
+                                print(f"{y_col} is already used as Wavelength. Please enter a different column name for Normalized_Flux: ")
+                            else:
+                                print(f"{y_col} is not a valid column name. Please enter a valid column name for Normalized_Flux: ")
+                            y_col = input()
+                    
+                        x = binary_table_hdu.data[x_col].ravel()
+                        y = binary_table_hdu.data[y_col].ravel()
+                        hdr = binary_table_hdu.header
 
             else:
                 # Otherwise, assume a regular FITS file and load image data
