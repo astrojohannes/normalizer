@@ -193,7 +193,7 @@
      <rect>
       <x>20</x>
       <y>70</y>
-      <width>628</width>
+      <width>637</width>
       <height>749</height>
      </rect>
     </property>
@@ -618,6 +618,37 @@
           <string>Identify+mask lines via r.m.s</string>
          </property>
         </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_17"/>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_6">
+         <item>
+          <widget class="QRadioButton" name="radio_maskmode_new">
+           <property name="text">
+            <string>Mode: New</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="radio_maskmode_add">
+           <property name="text">
+            <string>Mode: Add</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_undo">
+           <property name="text">
+            <string>Undo mask</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
         <widget class="Line" name="line_2">

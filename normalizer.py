@@ -142,6 +142,8 @@ class start(QMainWindow):
         
         self.gui.mask=np.array([])
         self.gui.telluricmask=np.array([])
+
+        self.mask_history = []  # keep mask history for undo function
         
         self.gui.xlim_l_last=0
         self.gui.xlim_h_last=0
@@ -368,6 +370,7 @@ class start(QMainWindow):
         self.gui.pushButton_linetable_mask.clicked.connect(self.linetable_mask)
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
         self.gui.pushButton_determine_rad_velocity.clicked.connect(self.determine_rad_velocity)
+        self.gui.pushButton_undo.clicked.connect(self.undo_mask_change)
         #self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
 
 #                                 IO PART
@@ -425,8 +428,10 @@ class start(QMainWindow):
 
                 filename = f"{file_name_without_extension}_{str(int(self.gui.xlim_l_last))}-{str(int(self.gui.xlim_h_last))}.fits"
 
-            self.gui.lbl_fname2.setText(filename)
-            self.writefits(filename)
+            # Check if the filename is valid, e.g. when user pressed "Cancel" the filename is empty
+            if filename != '':
+                self.gui.lbl_fname2.setText(filename)
+                self.writefits(filename)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -881,10 +886,12 @@ class start(QMainWindow):
                     ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3, label='telluric')
 
         ax[1].set_xlabel('wavelength [AA]')
+
+        # update the line mask table and get mask edges
+        mask_edges = self.update_line_mask_table()
         
         # plot mask in top panel
-        if len(self.gui.mask)>0:
-            mask_edges=self.find_mask_edges()
+        if len(self.gui.mask)>0 and len(mask_edges) > 0:
             ii=0
             while ii < len(mask_edges)-1:
                 xx1 = float(x[mask_edges[ii]])
@@ -1117,16 +1124,31 @@ class start(QMainWindow):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
+    def undo_mask_change(self):
+        if self.mask_history:
+            self.gui.mask = self.mask_history.pop()
+            self.fit_spline(showfit=True)
+            self.make_fig(0)
+            self.make_fig(1)
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def identify_mask(self):
         """ Identify/mask lines in normed spectrum
             using rms measured over smoothed spectrum
             iteratively until change in rms is less than 1 percent
         """
+
+        self.mask_history.append(np.copy(self.gui.mask))
  
         if len(self.gui.ynormcurrent)>1:
- 
-            del self.gui.mask
-            self.gui.mask=np.array([])
+
+           # Check if the radio_maskmode_add is checked
+            if self.gui.radio_maskmode_new.isChecked():
+                # If so, delete old mask and start with a fresh mask
+                del self.gui.mask
+                self.gui.mask=np.array([])
+                self.gui.tableWidget.clearContents()
 
             self.apply_mask()
 
@@ -1144,8 +1166,12 @@ class start(QMainWindow):
             sigma_high=float(self.gui.lineEdit_sigma_high.text())
             sigma_low=float(self.gui.lineEdit_sigma_low.text())        
 
-            iters=1     # we do several iterations in PeakMask, so this is left from previous versions
-            new_mask=np.array([True for x in yfit])
+            iters=1     # we do several iterations in PeakMask
+            if self.gui.radio_maskmode_new.isChecked():
+                new_mask = np.array([True for x in yfit])
+            else:
+                new_mask = np.copy(self.gui.mask)
+
             for i in range(iters):
 
                 if np.nansum(new_mask)==0:
@@ -1221,9 +1247,18 @@ class start(QMainWindow):
 
                 # xfit = x[new_mask != 0] # not needed anymore, since we perform no looping
                 # yfit = y[new_mask != 0]
-                
+
             self.fit_spline(showfit=True)
 
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def update_line_mask_table(self):
+        if len(self.gui.mask)>0:
+            mask_edges = self.find_mask_edges()
+            return mask_edges
+
+        return np.array([])
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -1242,7 +1277,7 @@ class start(QMainWindow):
         # Calculate the center and width of each region
         # and write these into the first and second column of the table, respectively
         self.gui.tableWidget.setRowCount(0)
-        self.gui.tableWidget.setRowCount(1000)
+        self.gui.tableWidget.setRowCount(10000)
 
         for i in range(0, len(edges), 2):
             try:
