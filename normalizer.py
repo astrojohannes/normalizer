@@ -144,6 +144,7 @@ class start(QMainWindow):
         self.gui.telluricmask=np.array([])
 
         self.mask_history = []  # keep mask history for undo function
+        self.userpath = os.getcwd()
         
         self.gui.xlim_l_last=0
         self.gui.xlim_h_last=0
@@ -386,7 +387,7 @@ class start(QMainWindow):
         else:
             mydir = QDir.currentPath()
 
-        filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.tr("*.fits"))
+        filename,_ = QFileDialog.getOpenFileName(None,'Open FITS spectrum', self.userpath, self.tr("*.fits"))
  
         if filename == '':
             # cancel was clicked
@@ -417,8 +418,8 @@ class start(QMainWindow):
             if showfiledialogue:
                 # Set the options for the dialog
                 options = QFileDialog.Options()
-                filename, _ = QFileDialog.getSaveFileName(self, "QFileDialog.getSaveFileName()", 
-                                                  "", "All Files (*);;Text Files (*.txt)", 
+                filename, _ = QFileDialog.getSaveFileName(self, "QFileDialog.getSaveFileName()", self.userpath,
+                                                  "All Files (*);;FITS Files (*.fits)", 
                                                   options=options)
 
             else:
@@ -592,6 +593,12 @@ class start(QMainWindow):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def readfits(self, fitsfile, hduid=0):
+
+        # store the path of the input filename for later use when saving
+        self.userpath = os.path.dirname(fitsfile)
+
+        # show filename in Plot Window header
+        self.plotwindow.setWindowTitle(os.path.basename(fitsfile))
 
         self.gui.ax[0].cla()
         self.gui.ax[1].cla()
@@ -935,6 +942,100 @@ class start(QMainWindow):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def fit_spline(self, showfit=True):
+        """ Fit a spline using different methods and the user input parameters """
+        if len(self.gui.xcurrent) > 1:
+            # update telluric mask
+            self.create_telluric_mask()
+    
+            # apply both, telluric and line mask --> updates ymaskedcurrent
+            self.apply_mask()
+    
+            # FITTING part
+            x, y = self.gui.xcurrent, self.gui.ycurrent
+    
+            xlim_l = float(self.gui.ax[0].get_xlim()[0])
+            xlim_h = float(self.gui.ax[0].get_xlim()[1])
+    
+            self.gui.xlim_l_last = xlim_l
+            self.gui.xlim_h_last = xlim_h
+ 
+            if self.gui.method == 'Polynomial':
+
+                degree = int(self.gui.lineEdit_degree.text())
+                if degree <=0: degree=0
+                elif degree>5: degree=5 
+
+                w = np.isnan(self.gui.ymaskedcurrent)
+                weights = np.ones_like(y)
+                weights[w] = 0.0
+
+                # Fit a weighted polynomial
+                coefficients = np.polyfit(x, y, degree, w=weights)
+                yi = np.polyval(coefficients, x)
+ 
+            else:
+                k = int(self.gui.lineEdit_degree.text())
+                if k <= 1: k = 1
+                elif k > 5: k = 5
+    
+                # read user input: smoothing parameter
+                s = int(self.gui.lineEdit_smooth.text())
+    
+                w = np.isnan(self.gui.ymaskedcurrent)
+                weights = np.ones_like(y)
+                weights[w] = 0.0
+    
+                if self.gui.comboBox_method.currentText() == 'LSQUnivariateSpline':
+                    every = int(self.gui.lineEdit_interior_knots.text())
+    
+                    t_indices = np.arange(1, len(x), every)
+                    final_indices = t_indices[~np.isnan(self.gui.ymaskedcurrent[t_indices])]
+                    self.gui.knots_x = x[final_indices]
+                    t = self.gui.knots_x
+    
+                    spl = self.gui.method(x, y, t, k=k, w=weights, check_finite=False, ext=3)
+                    yi = np.copy(spl(x)).flatten()
+    
+                    if len(self.gui.ymaskedcurrent) > 0 and len(yi) > 0:
+                        self.gui.knots_y = np.copy(spl(self.gui.knots_x)).flatten()
+    
+                else:
+                    scalingfactor = np.nanmean(y)
+                    if scalingfactor < 1000:
+                        scalingfactor = 1.0
+                    spl = self.gui.method(x, y/scalingfactor, k=k, w=weights/scalingfactor, s=s, check_finite=True, ext=3)
+                    spl.set_smoothing_factor(s)
+                    yi = scalingfactor * np.copy(spl(x)).flatten()
+    
+            if self.gui.lineEdit_offset.text().strip() == '':
+                offs = 1.0
+            else:
+                try:
+                    offs = float(self.gui.lineEdit_offset.text())
+                except:
+                    offs = 1.0
+    
+            ynorm = np.divide(y, np.array(yi), where=np.array(yi) != 0)
+            ynorm *= 1.0 / offs
+    
+            self.gui.yi = np.array(yi)
+    
+            if not len(self.gui.ynorm) > 0:
+                self.gui.ynorm = ynorm
+            self.gui.ynormcurrent = ynorm
+    
+            if len(self.gui.telluricmask) > 0:
+                self.gui.yi[self.gui.telluricmask == 0] = np.nan
+                self.gui.ynormcurrent[self.gui.telluricmask == 0] = 1.0
+    
+            self.make_fig(0, showfit=showfit)
+            self.make_fig(1, showfit=showfit)
+
+        # calculate RMS of current plot zoom
+        self.calc_rms()
+
+
+    def fit_spline_old(self, showfit=True):
 
         """ Fit a spline using different methods
             and the user input parameters
@@ -1105,6 +1206,8 @@ class start(QMainWindow):
         """
         current_method=self.gui.comboBox_method.currentText()
         if current_method=='UnivariateSpline':
+            self.gui.label_9.setHidden(False)
+            self.gui.lineEdit_fixpoints.setHidden(False)
             self.gui.label_8.setHidden(True)
             self.gui.lineEdit_interior_knots.setHidden(True)
             
@@ -1112,7 +1215,9 @@ class start(QMainWindow):
             self.gui.lineEdit_smooth.setHidden(False)
             
             self.gui.method=UnivariateSpline
-        else:
+        elif current_method=='LSQUnivariateSpline':
+            self.gui.label_9.setHidden(False)
+            self.gui.lineEdit_fixpoints.setHidden(False) 
             self.gui.label_2.setHidden(True)
             self.gui.lineEdit_smooth.setHidden(True)
 
@@ -1121,6 +1226,16 @@ class start(QMainWindow):
             
             self.gui.method=LSQUnivariateSpline
  
+        elif current_method == 'Polynomial':
+            self.gui.label_9.setHidden(True)
+            self.gui.lineEdit_fixpoints.setHidden(True)
+            self.gui.label_8.setHidden(True)
+            self.gui.lineEdit_interior_knots.setHidden(True)
+            self.gui.label_2.setHidden(True)
+            self.gui.lineEdit_smooth.setHidden(True)
+        
+            self.gui.method = 'Polynomial'
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -1134,6 +1249,117 @@ class start(QMainWindow):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def identify_mask(self):
+        """ Identify/mask lines in normed spectrum using rms measured over smoothed spectrum iteratively until change in rms is less than 1 percent """
+   
+        self.mask_history.append(np.copy(self.gui.mask))
+ 
+        if len(self.gui.ynormcurrent) > 1:
+            # Check if the radio_maskmode_add is checked
+            if self.gui.radio_maskmode_add.isChecked():
+                # If so, initialize the new mask with the current mask, if it exists
+                if len(self.gui.mask) > 0:
+                    new_mask = np.copy(self.gui.mask)
+                else:
+                    new_mask = np.array([False for _ in self.gui.ynormcurrent], dtype=bool)
+            else:
+                # Otherwise, start with a fresh mask
+                new_mask = np.array([False for _ in self.gui.ynormcurrent], dtype=bool)
+    
+            x = np.copy(self.gui.xcurrent)
+            y = np.copy(self.gui.ynormcurrent)
+    
+            if len(self.gui.telluricmask) > 0:
+                xfit = x[self.gui.telluricmask != 0]
+                yfit = y[self.gui.telluricmask != 0]
+                telluric_mask = self.gui.telluricmask[self.gui.telluricmask != 0].astype(bool)
+            else:
+                xfit = x
+                yfit = y
+                telluric_mask = np.ones_like(xfit, dtype=bool)  # No telluric mask, so all ones
+    
+            sigma_high = float(self.gui.lineEdit_sigma_high.text())
+            sigma_low = float(self.gui.lineEdit_sigma_low.text())
+    
+            # Define chunk size in Ångströms
+            chunk_size = 50.0
+   
+            # Process the spectrum in chunks
+            start_idx = 0
+            while start_idx < len(xfit):
+                # Find the end index where the x-axis value is 200 Ångströms away from the start
+                end_idx = start_idx
+                while end_idx < len(xfit) and (xfit[end_idx] - xfit[start_idx]) <= chunk_size:
+                    end_idx += 1
+    
+                x_chunk = xfit[start_idx:end_idx]
+                y_chunk = yfit[start_idx:end_idx]
+                mask_chunk = new_mask[start_idx:end_idx]
+                telluric_chunk = telluric_mask[start_idx:end_idx]
+    
+                if len(x_chunk) < 2:
+                    start_idx = end_idx
+                    continue
+    
+                # Fit a polynomial to the chunk for baseline correction
+                coefficients = np.polyfit(x_chunk, y_chunk, 1)
+                polynomial = np.poly1d(coefficients)
+                fitted_y = polynomial(x_chunk)
+                normed_y = y_chunk / fitted_y
+    
+                try:
+                    # Peak finding using the sigma thresholds
+                    masker_high = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_high, rms_tolerance=0.1, maxnumber_iterations=1)
+                    masker_low = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_low, rms_tolerance=0.1, maxnumber_iterations=1)
+    
+                    mask_high, _, rms_high = masker_high.create_mask()
+                    mask_low, _, rms_low = masker_low.create_mask()
+
+                    # Apply telluric mask
+                    mask_high &= telluric_chunk
+                    mask_low &= telluric_chunk
+    
+                    # Ensure the masks are not empty before proceeding
+                    if np.any(mask_high) or np.any(mask_low):
+                        iter_mask = np.array(exp_mask(mask_high, constraint=mask_low, keep_mask=True, quiet=True), dtype=bool)
+                        mask_chunk = np.logical_or(mask_chunk, iter_mask)
+                    else:
+                        print(f"No valid peaks found in chunk {x_chunk[0]}-{x_chunk[-1]}. Skipping.")
+    
+                    # Update the chunk in the overall mask
+                    new_mask[start_idx:end_idx] = mask_chunk
+    
+                except Exception as e:
+                    print(f"Masking failure in line identification for chunk {x_chunk[0]}-{x_chunk[-1]}:\n{e}")
+                    # Move to the next chunk
+                    start_idx = end_idx
+                    continue
+    
+                # Move to the next chunk
+                start_idx = end_idx
+    
+            # Update the global mask with the new mask
+            self.gui.mask = new_mask
+   
+            # Perform the final fit and update the plot
+            self.fit_spline(showfit=True)
+
+   
+    def calc_rms(self):
+
+        if len(self.gui.mask)>1:
+            # Calculate RMS of ycurrent where the mask is not NaN
+            valid_ycurrent = self.gui.ycurrent[~self.gui.mask & ~np.isnan(self.gui.ycurrent)]
+            number_contpoints = len(valid_ycurrent)
+            if len(valid_ycurrent) > 0:
+                rms = round(np.sqrt(np.mean((valid_ycurrent - np.mean(valid_ycurrent))**2)),3)
+                snr = round(1/rms,1)
+                print(f"Normalized continuum (# points={number_contpoints}): RMS={rms}, SNR={snr}")
+            else:
+                print("No valid data to calculate RMS.")
+
+    
+
+    def identify_mask_old(self):
         """ Identify/mask lines in normed spectrum
             using rms measured over smoothed spectrum
             iteratively until change in rms is less than 1 percent

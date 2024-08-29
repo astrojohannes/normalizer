@@ -334,6 +334,11 @@
              <string>LSQUnivariateSpline</string>
             </property>
            </item>
+           <item>
+            <property name="text">
+             <string>Polynomial</string>
+            </property>
+           </item>
           </widget>
          </item>
         </layout>

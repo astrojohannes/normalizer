@@ -52,7 +52,7 @@ class PeakMask:
 
             if new_rms > 0:
                 percent_change = np.ma.abs((new_rms - rms) / rms) * 100
-                print(f"RMS measured outside line masks: {round(new_rms,4)}")
+                #print(f"RMS measured outside line masks: {round(new_rms,4)}")
                 self.mask = copy.deepcopy(last_acceptable_mask if last_acceptable_mask is not None else mask)
                 rms = new_rms
                 if percent_change < self.rms_tolerance:
