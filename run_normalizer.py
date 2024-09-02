@@ -8,6 +8,7 @@ import getopt
 
 os.environ["XDG_SESSION_TYPE"]='x11'    # should enable correct window geometry etc. when Wayland is used
 os.environ['LANG'] = u'en_US.UTF-8'     # force locale to English, to assure dots as decimal sepatators
+os.environ['NORMALIZER_DIR'] = os.path.dirname(os.path.realpath(__file__))
 
 ## Print usage
 def usage():
@@ -90,7 +91,7 @@ if __name__ == "__main__":
         norm.gui.lbl_fname.setText(spectrum_file)
         norm.make_fig(0)
         norm.zoom_fig(wave_min,wave_max)
-        #norm.fit_spline()
+        norm.on_slice_pressed()
     elif not spectrum_file == None:
         norm.readfits(spectrum_file)
         norm.gui.lbl_fname.setText(spectrum_file)

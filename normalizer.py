@@ -110,20 +110,28 @@ class start(QMainWindow):
         self.gui.ax = self.plotwindow.ax  # Use the Axes from PlotWindow
 
         # set standard values
-        self.gui.method=UnivariateSpline
+        self.gui.method='Polynomial'
         
-        self.gui.lineEdit_degree.setText('3')
+        self.gui.lineEdit_degree.setText('0')
         self.gui.lineEdit_smooth.setText('200')
-        self.gui.lineEdit_sigma_high.setText('10.0')
-        self.gui.lineEdit_sigma_low.setText('3.0')
+        self.gui.label_2.setVisible(False) 
+        self.gui.lineEdit_smooth.setVisible(False)
+        self.gui.label_9.setVisible(False) 
+        self.gui.lineEdit_fixpoints.setVisible(False)
+        self.gui.lineEdit_sigma_high.setText('5.0')
+        self.gui.lineEdit_sigma_low.setText('2.5')
         self.gui.lineEdit_fixed_width.setText('10')
         self.gui.lineEdit_interior_knots.setText('200')
         self.gui.lineEdit_offset.setText('1.0')
         self.gui.lineEdit_auto_velocity_shift.setText('0.0')
-        self.gui.lineEdit_auto_velocity_shift_lim1.setText('-50')
-        self.gui.lineEdit_auto_velocity_shift_lim2.setText('50')
-        self.gui.rv=0.0
-        self.gui.rv_err=0.0
+        self.gui.lineEdit_auto_velocity_shift_lim1.setText('-300')
+        self.gui.lineEdit_auto_velocity_shift_lim2.setText('300')
+        self.gui.lineEdit_auto_velocity_shift_lim1.setReadOnly(True)
+        self.gui.lineEdit_auto_velocity_shift_lim2.setReadOnly(True)
+
+        self.vradshift_aa = []
+        self.vradshift_kms = 0.0
+        self.vradshift_applied = False
         self.snr = None
  
         self.gui.x=np.array([])     # origianl wavelength range
@@ -158,7 +166,7 @@ class start(QMainWindow):
         self.gui.lineEdit_telluric_vrad.setText('0.0')
 
         # Hide button to apply velo shift
-        self.gui.pushButton_shift_spectrum.setVisible(False)
+        self.gui.pushButton_shift_spectrum.setVisible(True)
         self.gui.lineEdit_auto_velocity_shift.setVisible(True)
 
         # adjust table row height
@@ -198,8 +206,8 @@ class start(QMainWindow):
 
         #print(f"Coordinates selected: ({x0}, {y0}) to ({x1}, {y1})")
         tellurics = self.gui.lineEdit_telluric.text()
-        x0_user = round(x0,2)
-        x1_user = round(x1,2)
+        x0_user = round(x0,3)
+        x1_user = round(x1,3)
 
         if x0_user > x1_user:
             x0 = x1_user
@@ -209,25 +217,95 @@ class start(QMainWindow):
             x1 = x1_user
 
         if flagtype=='BAD':
+            self.mask_history.append(np.copy(self.gui.mask))
             self.gui.lineEdit_telluric.setText(f"{tellurics}, ({x0},{x1})")
-        elif flagtype=='LINE':
-            linewidth = round(0.5*(x1-x0),2)
-            linecenter = round(x0 + linewidth,2)
-            self.add_values_to_first_empty_row(self.gui.tableWidget, [linecenter, linewidth])
-        elif flagtype=='UNFLAG':
 
-            # unflag line flags:
+        elif flagtype=='LINE':
+            self.mask_history.append(np.copy(self.gui.mask))
+            linewidth = round(0.5*(x1-x0),3)
+            linecenter = round(x0 + linewidth,3)
+            self.add_values_to_first_empty_row(self.gui.tableWidget, [linecenter, linewidth])
+
+
+        elif flagtype == 'UNFLAG':
+            self.mask_history.append(np.copy(self.gui.mask))
+
+            # Unflag line flags:
             table = self.gui.tableWidget
             rowCount = table.rowCount()
+        
+            # List to store rows to remove and new rows to add
+            rows_to_remove = []
+            rows_to_add = []
+        
             # Iterate through the rows in reverse order
-            for row in range(rowCount - 1, -1, -1):  # Start from the last row
-                # Retrieve the value from the first column of the current row
-                item = table.item(row, 0)  # 0 for the first column
-                if item:  # Check if the item is not None
-                    value = float(item.text())  # or int(item.text()), as appropriate
-                    # Check if the value is between x0 and x1
-                    if x0 <= value <= x1:
-                        table.removeRow(row)  # Delete the row if the condition is met
+            for row in range(rowCount -1, -1, -1):  # Start from the last row
+       
+                # Retrieve the value from the first and second columns of the current row
+                item_center = table.item(row, 0)  # Center value in column 0
+                item_width = table.item(row, 1)  # Width value in column 1
+       
+                # Skip if either item is empty or invalid
+                if not item_center or not item_width:
+                    continue
+        
+                try:
+                    center_value = float(item_center.text())
+                    width_value = float(item_width.text())
+                except ValueError:
+                    # Skip rows with non-numeric data
+                    continue
+ 
+                center_value = float(item_center.text())
+                width_value = float(item_width.text())
+        
+                # Calculate the range
+                range_start = center_value - width_value
+                range_end = center_value + width_value
+        
+                # Check for overlap with the user's selection [x0, x1]
+                if x0 <= range_start and x1 >= range_end:
+                    # Case 0: Remove the entire range
+                    rows_to_remove.append(row)
+        
+                elif x0 > range_start and x1 < range_end:
+                    # Case 1: Exclude from the middle part of the existing range
+                    rows_to_remove.append(row)
+        
+                    # Add the left part
+                    new_width_left = (x0 - range_start) / 2.0
+                    new_center_left = range_start + new_width_left
+                    rows_to_add.append((row, new_center_left, new_width_left))
+        
+                    # Add the right part
+                    new_width_right = (range_end - x1) / 2.0
+                    new_center_right = x1 + new_width_right
+                    rows_to_add.append((row + 1, new_center_right, new_width_right))
+        
+                elif x1 > range_end and x0 > range_start and x0 < range_end:
+                    # Case 2: Remove the right part of the range
+                    rows_to_remove.append(row)
+                    new_width = (x0 - range_start) / 2.0
+                    new_center = range_start + new_width
+                    rows_to_add.append((row, new_center, new_width))
+
+                elif x0 < range_start and x1 < range_end and x1 > range_start:
+                    # Case 3: Remove the left part of the range
+                    rows_to_remove.append(row)
+                    new_width = (range_end - x1) / 2.0
+                    new_center = x1 + new_width
+                    rows_to_add.append((row, new_center, new_width))
+
+            # Remove the rows after processing
+            for row in rows_to_remove:
+                table.removeRow(row)
+ 
+            # Now add the new rows
+            for row, center, width in rows_to_add:
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(str(round(center, 3))))
+                table.setItem(row, 1, QTableWidgetItem(str(round(width, 3))))
+
 
             # unflag tellurics
             # Parse the intervals from the telluric line edit
@@ -372,7 +450,7 @@ class start(QMainWindow):
         self.gui.pushButton_savefits.clicked.connect(self.saveFile)
         self.gui.pushButton_determine_rad_velocity.clicked.connect(self.determine_rad_velocity)
         self.gui.pushButton_undo.clicked.connect(self.undo_mask_change)
-        #self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
+        self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
 
 #                                 IO PART
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -438,6 +516,8 @@ class start(QMainWindow):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def zoom_fig(self,wave_min,wave_max):
+        if wave_min < min(self.gui.x): wave_min = min(self.gui.x)
+        if wave_max > max(self.gui.x): wave_max = max(self.gui.x)
         self.gui.ax[0].set_xlim([wave_min,wave_max])
         #self.gui.ax[1].set_xlim()
 
@@ -615,6 +695,12 @@ class start(QMainWindow):
                     break
             # Load binary table data if it exists
             if binary_table_hdu is not None:
+                # Read some header info
+                current_header = hdus[1].header
+                if all(key in current_header for key in ['SN_RVAPL', 'SN_RVVAL']):
+                    if bool(current_header['SN_RVAPL']):
+                        self.gui.lineEdit_telluric_vrad.setText(str(current_header['SN_RVVAL']))
+
                 available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
                 
                 # Check if 'Wavelength', 'Normalized_Flux' or 'Flux' columns are available
@@ -829,10 +915,12 @@ class start(QMainWindow):
         new_hdr.add_comment("Spectrum processed with Spectrum Normalizer")
         new_hdr.add_comment("https://github.com/astrojohannes/normalizer")
         vrad = self.gui.lineEdit_auto_velocity_shift.text()
-        if vrad != '':
+        if self.vradshift_applied:
+            vrad = self.gui.lineEdit_telluric_vrad.text()
             try:
                 vrad = str(round(float(vrad),2))
-                new_hdr['SPEN_RV'] = (vrad, 'Rad. vel. in km/s from Spec. Normalizer')
+                new_hdr['SN_RVVAL'] = (vrad, 'Rad. vel. in km/s from Spec. Normalizer')
+                new_hdr['SN_RVAPL'] = ('True', 'If True, spectrum was shifted by SN_RVVAL')
             except:
                 pass 
  
@@ -868,16 +956,13 @@ class start(QMainWindow):
 
         col = ['b', 'g']
 
-        ax[figid].step(x, y, color=col[figid], lw=0.8)
+        ax[figid].step(x, y, color=col[figid], lw=1.0)
 
         if figid == 0:
             ax[0].text(0.03, 0.1, 'Original', fontsize=20, transform=ax[0].transAxes)
         elif figid == 1:
             ax[1].text(0.03, 0.1, 'Normalized', fontsize=20, transform=ax[1].transAxes)
 
-        # Plot continuum fit in figure 0
-        if len(self.gui.yi) > 0 and figid == 0 and showfit:
-            ax[0].plot(x, self.gui.yi, color='r', lw=1.5)
 
         # plot telluric regions
         if figid == 0 and showfit:
@@ -890,7 +975,7 @@ class start(QMainWindow):
                     telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
 
                 for start, end in telluric_intervals:
-                    ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.3, label='telluric')
+                    ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.2, label='telluric')
 
         ax[1].set_xlabel('wavelength [AA]')
 
@@ -910,7 +995,17 @@ class start(QMainWindow):
                 ylim_l=np.nanmin(self.gui.ycurrent)
                 ylim_h=np.nanmax(self.gui.ycurrent)
                 yy=np.linspace(ylim_l,ylim_h,10)
-                ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.3, label='line')
+                ax[0].fill_betweenx(yy,xx1,xx2, color='lightgray', alpha=0.2, label='line')
+
+
+        # Plot continuum fit in figure 0
+        if len(self.gui.yi) > 0 and figid == 0 and showfit:
+            # plot unmasked ranges (=continuum)
+            ax[0].plot(self.gui.xcurrent,self.gui.ymaskedcurrent,'orange', lw=1.5)
+            ax[0].plot(x, self.gui.yi, color='r', lw=3.0, label='continuum')
+
+
+
 
         # plot a horizontal line at 1
         ax[1].axhline(y=1.0, linestyle='--', color='k', lw=2)
@@ -963,7 +1058,7 @@ class start(QMainWindow):
 
                 degree = int(self.gui.lineEdit_degree.text())
                 if degree <=0: degree=0
-                elif degree>5: degree=5 
+                elif degree>9: degree=9
 
                 w = np.isnan(self.gui.ymaskedcurrent)
                 weights = np.ones_like(y)
@@ -1078,7 +1173,7 @@ class start(QMainWindow):
             if len(wu)>0 and wu[0].strip() != '':
                 wu=np.array([float(a) for a in wu[:-1]],dtype=float)
                 for fp in wu:
-                    weights[self.find_nearest_idx(x,fp)]=1e6
+                    weights[self.find_nearest_idx(x,fp)]=1e9
 
             if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
                 
@@ -1281,7 +1376,7 @@ class start(QMainWindow):
             sigma_low = float(self.gui.lineEdit_sigma_low.text())
     
             # Define chunk size in Ångströms
-            chunk_size = 50.0
+            chunk_size = 20.0
    
             # Process the spectrum in chunks
             start_idx = 0
@@ -1308,8 +1403,8 @@ class start(QMainWindow):
     
                 try:
                     # Peak finding using the sigma thresholds
-                    masker_high = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_high, rms_tolerance=0.1, maxnumber_iterations=1)
-                    masker_low = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_low, rms_tolerance=0.1, maxnumber_iterations=1)
+                    masker_high = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_high, rms_tolerance=0.1, maxnumber_iterations=2)
+                    masker_low = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_low, rms_tolerance=0.1, maxnumber_iterations=2)
     
                     mask_high, _, rms_high = masker_high.create_mask()
                     mask_low, _, rms_low = masker_low.create_mask()
@@ -1628,16 +1723,16 @@ class start(QMainWindow):
         return a * np.exp(-(x - b)**2 / (2 * c**2))
 
     def read_template(self, file_path):
-        data = np.genfromtxt(file_path, dtype=[('waveobs', np.float64), ('flux', np.float64), ('err', np.float64)])
+        #data = np.genfromtxt(file_path, dtype=[('waveobs', np.float64), ('flux', np.float64), ('err', np.float64)])
+        data = np.genfromtxt(file_path, dtype=[('waveobs', np.float64), ('flux', np.float64)])
         return data.view(np.recarray)
 
     def determine_rad_velocity(self):
-        c = 300000.0  # speed of light in km/s
+        c = 299792.458  # speed of light in km/s
 
         if len(self.gui.ynormcurrent)>0:
-            waveobs,flux=np.array(self.gui.xcurrent-self.gui.rv,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
+            waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
         else:
-            self.gui.rv=0.0
             self.gui.lineEdit_auto_velocity_shift.setText('0.0')
             return
 
@@ -1651,8 +1746,9 @@ class start(QMainWindow):
         this_spec.flux = np.interp(this_spec.waveobs, this_spec.waveobs[mask], this_spec.flux[mask])
 
         #--- Radial Velocity determination with template -------------------------------
-        template = self.read_template("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-        template['waveobs']=template['waveobs']*10.0    # convert to Angstroem
+        #template = self.read_template("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+        template = self.read_template("./templates/Kitt_Peak_Flux_Atlas_2005.csv")
+        #template['waveobs']=template['waveobs']*10.0    # convert to Angstroem
 
         # Check and interpolate missing data for template
         mask = np.isfinite(template.flux)
@@ -1687,6 +1783,9 @@ class start(QMainWindow):
         mean_wavelength = np.mean(dw)  # or any specific wavelength you are interested in
         rw = mean_wavelength * (rv / c)
 
+        self.vradshift_aa = rv[maxind] / c
+        self.vradshift_kms = rv[maxind]
+
         print("Cross-correlation function is maximized at dRV = ", rv[maxind], " km/s")
         print("Cross-correlation function is maximized at dRV = ", rw[maxind], " AA")
  
@@ -1701,17 +1800,55 @@ class start(QMainWindow):
         plt.text(rw[maxind]+0.1,cc[maxind]/np.nanmax(cc),"R$_V$="+str(round(rv[maxind],3))+" km s$^{-1}$")
         plt.xlabel('R$_V$ [Å]')
         plt.tight_layout()
-        plt.show()
+        plt.show(block=False)
 
+        self.gui.lineEdit_auto_velocity_shift.setReadOnly(False)
         self.gui.lineEdit_auto_velocity_shift.setText(str(round(rv[maxind],3)))
+        self.gui.lineEdit_auto_velocity_shift.setReadOnly(True)
+ 
+    def apply_velocity_shift(self):
+ 
+        self.gui.xcurrent -= self.gui.xcurrent*(self.vradshift_aa)/2.0
+        self.gui.x -= self.gui.x*(self.vradshift_aa)/2.0
+        self.gui.xzoom -= self.gui.xzoom*(self.vradshift_aa)/2.0
 
-    def apply_velocity_shift(self,rv_new=0.0):
+        self.vradshift_applied = True
+
+        # Shift the line mask
+        # Unflag line flags:
+        table = self.gui.tableWidget
+        rowCount = table.rowCount()
         
-        if rv_new==0:
-            rv_new=float(self.gui.lineEdit_auto_velocity_shift.text())
-        new_xcurrent=np.copy(self.gui.xcurrent)+rv_new-self.gui.rv
-        self.gui.xcurrent=new_xcurrent
-        self.gui.rv=rv_new
+        # Iterate through the rows in reverse order
+        for row in range(rowCount -1, -1, -1):  # Start from the last row
+            # Retrieve the value from the first and second columns of the current row
+            item_center = table.item(row, 0)  # Center value in column 0
+            item_width = table.item(row, 1)  # Width value in column 1
+
+            # Skip if either item is empty or invalid
+            if not item_center or not item_width:
+                continue
+
+            try:
+                center_value = float(item_center.text())
+                width_value = float(item_width.text())
+            except ValueError:
+                # Skip rows with non-numeric data
+                continue
+
+            center_value -= float(item_center.text())*(self.vradshift_aa)
+            width_value = float(item_width.text())
+
+            table.setItem(row, 0, QTableWidgetItem(str(round(center_value, 3))))
+
+        # shift tellurics
+        try:
+            vrad_tell = float(self.gui.lineEdit_telluric_vrad.text())
+        except:
+            vrad_tell = 0.0
+
+        self.gui.lineEdit_telluric_vrad.setText(str(round(vrad_tell+float(self.vradshift_kms),3)))
+
         self.fit_spline()
         self.make_fig(0)
         self.make_fig(1)

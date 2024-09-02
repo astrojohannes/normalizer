@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Qt5Agg')
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QPushButton, QWidget, QAction
 from PyQt5.QtCore import pyqtSignal, Qt
@@ -7,6 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.widgets import RectangleSelector
 import matplotlib.pyplot as plt
 import numpy as np
+plt.ion()
 
 class CustomToolbar(NavigationToolbar):
     slicePressed = pyqtSignal()

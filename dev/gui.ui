@@ -13,7 +13,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>660</width>
+    <width>800</width>
     <height>880</height>
    </rect>
   </property>
@@ -25,14 +25,14 @@
   </property>
   <property name="minimumSize">
    <size>
-    <width>660</width>
+    <width>800</width>
     <height>782</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
-    <width>660</width>
-    <height>880</height>
+    <width>1000</width>
+    <height>900</height>
    </size>
   </property>
   <property name="font">
@@ -71,6 +71,9 @@
       <height>37</height>
      </size>
     </property>
+    <property name="toolTip">
+     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open new fits/csv file for normalization. In case a CSV file is provided, the first column is interpreted as wavelength in Å and the second column as flux.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    </property>
     <property name="text">
      <string>Open</string>
     </property>
@@ -90,8 +93,11 @@
       <verstretch>0</verstretch>
      </sizepolicy>
     </property>
+    <property name="toolTip">
+     <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Save the normalized spectrum to the current directory. The filename is the original basename with the wavelength range added, e.g. INFILE.fits would be saved as INFILE_5000-6000.fits, given that the data spans from 5000 to 6000 Å.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    </property>
     <property name="text">
-     <string>Save</string>
+     <string>Autosave</string>
     </property>
    </widget>
    <widget class="QWidget" name="layoutWidget">
@@ -125,6 +131,12 @@
      </item>
      <item>
       <widget class="QLabel" name="lbl_fname2">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+         <horstretch>1</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
        <property name="font">
         <font>
          <family>Verdana</family>
@@ -172,6 +184,12 @@
      </item>
      <item>
       <widget class="QLabel" name="lbl_fname">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+         <horstretch>1</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
        <property name="font">
         <font>
          <family>Verdana</family>
@@ -193,8 +211,8 @@
      <rect>
       <x>20</x>
       <y>70</y>
-      <width>637</width>
-      <height>749</height>
+      <width>779</width>
+      <height>772</height>
      </rect>
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout_main">
@@ -202,23 +220,25 @@
       <number>3</number>
      </property>
      <item>
-      <spacer name="horizontalSpacer_3">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <layout class="QVBoxLayout" name="verticalLayout">
+      <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0">
        <property name="spacing">
         <number>4</number>
        </property>
+       <item>
+        <widget class="QLabel" name="label_14">
+         <property name="font">
+          <font>
+           <family>Courier New</family>
+           <pointsize>14</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>Flag telluric bands</string>
+         </property>
+        </widget>
+       </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_14">
          <property name="spacing">
@@ -226,6 +246,9 @@
          </property>
          <item>
           <widget class="QLabel" name="label_10">
+           <property name="toolTip">
+            <string>Ranges in wavelength affected by tellurics will be flagged BAD. Predefined ranges based on atmospheric models are given in the format: (START1, END1), (START2,END2). You may add or alter the list of ranges. Note that STARTi and ENDi must be given in rest-frame air wavelengths. If the spectrum was previously shifted, the shift (V_RAD) in km/s must be entered in the field below.</string>
+           </property>
            <property name="text">
             <string>Telluric bands</string>
            </property>
@@ -262,8 +285,11 @@
          </property>
          <item>
           <widget class="QLabel" name="label_12">
+           <property name="toolTip">
+            <string>If the observed spectrum was shifted previously, the amount of the shift must be entered in km/s to correctly re-align telluric bands.</string>
+           </property>
            <property name="text">
-            <string>V_rad</string>
+            <string>V_rad (km/s)</string>
            </property>
           </widget>
          </item>
@@ -293,8 +319,29 @@
        </item>
        <item>
         <widget class="Line" name="line_5">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>10</height>
+          </size>
+         </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_15">
+         <property name="font">
+          <font>
+           <family>Courier New</family>
+           <pointsize>14</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>Continuum Fitting</string>
          </property>
         </widget>
        </item>
@@ -305,6 +352,9 @@
          </property>
          <item>
           <widget class="QLabel" name="label_6">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Continuum fitting method&lt;/span&gt;&lt;/p&gt;&lt;p&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;Polynomial:&lt;/span&gt; fit a polynomial of degree &lt;span style=&quot; font-style:italic;&quot;&gt;n&lt;/span&gt; (0&amp;lt;=n&amp;lt;=9) using &lt;span style=&quot; font-style:italic;&quot;&gt;numpy.polyfit&lt;br/&gt;&lt;/span&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;UnivariateSpline: &lt;/span&gt;Fits a spline of degree &lt;span style=&quot; font-style:italic;&quot;&gt;n&lt;/span&gt; (1&amp;lt;=n&amp;lt;=5) using &lt;span style=&quot; font-style:italic;&quot;&gt;scipy.interpolate.UnivariateSpline.&lt;/span&gt; The number of knots will be increased until the smoothing condition is satisfied: &lt;span style=&quot; font-family:'monospace';&quot;&gt;sum((w[i] * (y[i]-spl(x[i])))**2, axis=0) &amp;lt;= s&lt;/span&gt;, where the weights &lt;span style=&quot; font-style:italic;&quot;&gt;w&lt;/span&gt; are uniform in case of no fixpoints.&lt;br/&gt;&lt;span style=&quot; text-decoration: underline;&quot;&gt;LSQUnivariateSpline:&lt;/span&gt; Fits a spline of degree &lt;span style=&quot; font-style:italic;&quot;&gt;n&lt;/span&gt; (1&amp;lt;=n&amp;lt;=5) using &lt;span style=&quot; font-style:italic;&quot;&gt;scipy.interpolate.LSQUnivariateSpline&lt;/span&gt;. Every t-th datapoint is used as knotpoint. If no fixpoints are defined, uniform weights (&lt;span style=&quot; font-style:italic;&quot;&gt;w&lt;/span&gt;) are applied.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
            <property name="text">
             <string>Method</string>
            </property>
@@ -326,17 +376,17 @@
            </property>
            <item>
             <property name="text">
+             <string>Polynomial</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
              <string>UnivariateSpline</string>
             </property>
            </item>
            <item>
             <property name="text">
              <string>LSQUnivariateSpline</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Polynomial</string>
             </property>
            </item>
           </widget>
@@ -350,8 +400,11 @@
          </property>
          <item>
           <widget class="QLabel" name="label">
+           <property name="toolTip">
+            <string>Degree n of the fit function</string>
+           </property>
            <property name="text">
-            <string>Degree (1&lt;=k&lt;=5)</string>
+            <string>Degree (n)</string>
            </property>
           </widget>
          </item>
@@ -386,8 +439,11 @@
          </property>
          <item>
           <widget class="QLabel" name="label_2">
+           <property name="toolTip">
+            <string>Smoothing factor applied in UnivariateSpline function</string>
+           </property>
            <property name="text">
-            <string>Smooth</string>
+            <string>Smooth (s)</string>
            </property>
           </widget>
          </item>
@@ -422,6 +478,9 @@
          </property>
          <item>
           <widget class="QLabel" name="label_8">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;When LSQUnivariateSpline fitting is applied, every t-th datapoint is used as knotpoint, in case the t-th datapoint is not flagged as line or telluric region.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
            <property name="text">
             <string>Knots (t)</string>
            </property>
@@ -461,6 +520,9 @@
          </property>
          <item>
           <widget class="QLabel" name="label_9">
+           <property name="toolTip">
+            <string>Fixpoints can be entered as a comma separated list of float numbers representing wavelengths at which the fit function should intersect with the data. This is done via increase of the weight (w) of the nearest datapoint to an arbitrary high value (1e9).</string>
+           </property>
            <property name="text">
             <string>Fixpoints</string>
            </property>
@@ -497,8 +559,11 @@
          </property>
          <item>
           <widget class="QLabel" name="label_13">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;A re-normalization factor &lt;span style=&quot; font-style:italic;&quot;&gt;f&lt;/span&gt; that is used to further shift the spectrum after the fit function is applied to the data, i.e. the normalized intensities are multiplied by 1/&lt;span style=&quot; font-style:italic;&quot;&gt;f&lt;/span&gt;.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
            <property name="text">
-            <string>Renorm Factor</string>
+            <string>Renorm Factor (f)</string>
            </property>
           </widget>
          </item>
@@ -554,8 +619,29 @@
        </item>
        <item>
         <widget class="Line" name="line">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>10</height>
+          </size>
+         </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_16">
+         <property name="font">
+          <font>
+           <family>Courier New</family>
+           <pointsize>14</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>Flag lines</string>
          </property>
         </widget>
        </item>
@@ -566,10 +652,32 @@
          </property>
          <item>
           <widget class="QLabel" name="label_7">
+           <property name="minimumSize">
+            <size>
+             <width>140</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Line identification using mask dilation&lt;/span&gt;&lt;br/&gt;Line masks are identified in the normalized spectrum using iterative calculations of the mean and standard deviation (&lt;span style=&quot; font-style:italic;&quot;&gt;sigma&lt;/span&gt;). Peaks are identified using the high mask level (&lt;span style=&quot; font-style:italic;&quot;&gt;sigma_high&lt;/span&gt;), i.e. a datapoint is considered a peak when its intensity is &lt;span style=&quot; font-style:italic;&quot;&gt;sigma_high &lt;/span&gt;times higher than the mean. A second mask is generated using the &lt;span style=&quot; font-style:italic;&quot;&gt;sigma_low&lt;/span&gt; value. The final mask is then the result of expanding the high mask left- and rightwards of the peak down to the &lt;span style=&quot; font-style:italic;&quot;&gt;sigma_low &lt;/span&gt;level.&lt;br/&gt;Thus, lowering the high mask value will lead to an increase in identified lines, while lowering the low mask value will lead to an increase of the mask widths.&lt;br/&gt;&lt;br/&gt;&lt;br/&gt;The &lt;span style=&quot; font-weight:600;&quot;&gt;mode of line identification&lt;/span&gt; can be &lt;span style=&quot; font-style:italic;&quot;&gt;New&lt;/span&gt; or &lt;span style=&quot; font-style:italic;&quot;&gt;Add.Mode:New&lt;/span&gt; removes all previously identified lines (as given in the line mask table) and &lt;span style=&quot; font-style:italic;&quot;&gt;Mode: Add&lt;/span&gt; will add and/or update newly identified lines and widths.&lt;br/&gt;&lt;br/&gt;The &lt;span style=&quot; font-weight:600;&quot;&gt;Undo mask&lt;/span&gt; button will recover previous masks. Pressing the button multiple times will go iteratively go back in mask history.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
            <property name="text">
             <string>mask high/low</string>
            </property>
           </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_5">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <widget class="QLineEdit" name="lineEdit_sigma_high">
@@ -581,11 +689,24 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>100</width>
              <height>16777215</height>
             </size>
            </property>
           </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_4">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <widget class="QLineEdit" name="lineEdit_sigma_low">
@@ -597,7 +718,7 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>100</width>
              <height>16777215</height>
             </size>
            </property>
@@ -631,6 +752,9 @@
         <layout class="QHBoxLayout" name="horizontalLayout_6">
          <item>
           <widget class="QRadioButton" name="radio_maskmode_new">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-style:italic;&quot;&gt;Mode:New&lt;/span&gt; removes all previously identified lines (as given in the line mask table).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
            <property name="text">
             <string>Mode: New</string>
            </property>
@@ -641,6 +765,9 @@
          </item>
          <item>
           <widget class="QRadioButton" name="radio_maskmode_add">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-style:italic;&quot;&gt;Mode: Add&lt;/span&gt; will add and/or update newly identified lines and widths.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
            <property name="text">
             <string>Mode: Add</string>
            </property>
@@ -657,6 +784,12 @@
        </item>
        <item>
         <widget class="Line" name="line_2">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>10</height>
+          </size>
+         </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
@@ -719,8 +852,29 @@
        </item>
        <item>
         <widget class="Line" name="line_4">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>10</height>
+          </size>
+         </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_17">
+         <property name="font">
+          <font>
+           <family>Courier New</family>
+           <pointsize>14</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>Shift Spectrum (radial velocity)</string>
          </property>
         </widget>
        </item>
@@ -731,10 +885,32 @@
          </property>
          <item>
           <widget class="QLabel" name="label_11">
+           <property name="minimumSize">
+            <size>
+             <width>140</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string>Shift limits for radial velocity determinations. Limits are currently fixed to +/- 300km/s.</string>
+           </property>
            <property name="text">
-            <string>Shift limits</string>
+            <string>Shift limits (km/s)</string>
            </property>
           </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_7">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <widget class="QLineEdit" name="lineEdit_auto_velocity_shift_lim1">
@@ -746,11 +922,24 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>100</width>
              <height>16777215</height>
             </size>
            </property>
           </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_6">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <widget class="QLineEdit" name="lineEdit_auto_velocity_shift_lim2">
@@ -762,7 +951,7 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>100</width>
              <height>16777215</height>
             </size>
            </property>
@@ -779,7 +968,7 @@
           <widget class="QPushButton" name="pushButton_determine_rad_velocity">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-             <horstretch>0</horstretch>
+             <horstretch>1</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
@@ -832,9 +1021,15 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>80</width>
              <height>16777215</height>
             </size>
+           </property>
+           <property name="toolTip">
+            <string>This is the last determined velocity shift.</string>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
            </property>
           </widget>
          </item>
@@ -861,6 +1056,12 @@
        </item>
        <item>
         <widget class="Line" name="line_3">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>10</height>
+          </size>
+         </property>
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
          </property>
@@ -882,9 +1083,25 @@
       </layout>
      </item>
      <item>
+      <spacer name="horizontalSpacer_3">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Minimum</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
       <widget class="QTableWidget" name="tableWidget">
        <property name="sizePolicy">
-        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+        <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
          <horstretch>1</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
@@ -3003,9 +3220,12 @@
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
        </property>
+       <property name="sizeType">
+        <enum>QSizePolicy::Minimum</enum>
+       </property>
        <property name="sizeHint" stdset="0">
         <size>
-         <width>40</width>
+         <width>20</width>
          <height>20</height>
         </size>
        </property>
