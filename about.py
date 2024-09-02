@@ -1,3 +1,4 @@
+import os
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QDialog, QSpacerItem, QSizePolicy
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QFont
@@ -24,7 +25,7 @@ class AboutWin(QDialog):
         
         # Load and add the logo
         logo_label = QLabel(self)
-        pixmap = QPixmap("Logo_spectrum_normalizer.png")
+        pixmap = QPixmap(os.environ['NORMALIZER_DIR']+"/Logo_spectrum_normalizer.png")
         logo_label.setPixmap(pixmap)
         logo_layout.addWidget(logo_label)
 

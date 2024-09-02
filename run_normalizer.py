@@ -84,7 +84,7 @@ if __name__ == "__main__":
     QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle('Breeze')  # ['Breeze', 'Oxygen', 'QtCurve', 'Windows', 'Fusion', 'Cleanlooks']
-    norm = n.start("dev/gui.ui")
+    norm = n.start(os.environ['NORMALIZER_DIR']+"/dev/gui.ui")
     norm.connect_buttons()
     if not spectrum_file == None and wave_min>0 and wave_max>0:
         norm.readfits(spectrum_file)

@@ -4,7 +4,7 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTableWidget, QTableWidgetItem, QVBoxLayout, QAction
 from PyQt5.QtCore import QFile, QIODevice, QObject, Qt, QSortFilterProxyModel, QDir, QCoreApplication, QEvent
 from PyQt5.uic import loadUi
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QClipboard, QKeySequence
 
 import numpy as np
 from numpy import inf, nan
@@ -51,7 +51,64 @@ def table_key_press_event_filter(obj, event):
             item.setText('')  # Set the text of the item to an empty string
 
         return True  # Indicate that the event has been handled
+
+
+    elif event.type() == QEvent.KeyPress and event.matches(QKeySequence.Copy):
+
+        selected_ranges = obj.selectedRanges()
+        if not selected_ranges:
+            return
+
+        table_data = []
+        for selected_range in selected_ranges:
+            for row in range(selected_range.topRow(), selected_range.bottomRow() + 1):
+                row_data = []
+                for col in range(selected_range.leftColumn(), selected_range.rightColumn() + 1):
+                    item = obj.item(row, col)
+                    row_data.append(item.text() if item else '')
+                table_data.append('\t'.join(row_data))
+
+        # Convert the selected table data to a string
+        table_string = '\n'.join(table_data)
+
+        # Copy the table data to the clipboard
+        clipboard = QApplication.clipboard()
+        clipboard.setText(table_string)
+
+        return True
+
+    elif event.type() == QEvent.KeyPress and event.matches(QKeySequence.Paste):
+        # Handle pasting clipboard data into the table
+        clipboard = QApplication.clipboard()
+        clipboard_text = clipboard.text()
+
+        if clipboard_text:
+            selected_ranges = obj.selectedRanges()
+
+            if selected_ranges:
+                # Start pasting at the top-left corner of the selected range
+                top_left_row = selected_ranges[0].topRow()
+                top_left_col = selected_ranges[0].leftColumn()
+
+                # Split clipboard data into rows and columns
+                rows = clipboard_text.split('\n')
+                for i, row_data in enumerate(rows):
+                    columns = row_data.split('\t')
+                    for j, text in enumerate(columns):
+                        target_row = top_left_row + i
+                        target_col = top_left_col + j
+
+                        if target_row < obj.rowCount() and target_col < obj.columnCount():
+                            item = obj.item(target_row, target_col)
+                            if not item:
+                                item = QTableWidgetItem()
+                                obj.setItem(target_row, target_col, item)
+                            item.setText(text)
+
+        return True  # Indicate that the event has been handled
+
     return False  # Pass other events to the base class
+
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -161,7 +218,7 @@ class start(QMainWindow):
         layout = self.gui.horizontalLayout_main
 
         # Standard telluric absorption bands
-        telluric_intervals = self.find_telluric_intervals("skycalc_molec_abs.txt")
+        telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
         self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
         self.gui.lineEdit_telluric_vrad.setText('0.0')
 
@@ -200,7 +257,6 @@ class start(QMainWindow):
         return super().eventFilter(obj, event)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
-
 
     def on_coordinates_selected(self, x0, y0, x1, y1, flagtype):
 
@@ -411,7 +467,7 @@ class start(QMainWindow):
         self.gui.ax[1].cla()
 
         # Standard telluric absorption bands
-        telluric_intervals = self.find_telluric_intervals("skycalc_molec_abs.txt")
+        telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
         self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
         self.gui.lineEdit_telluric_vrad.setText('0.0')
 
@@ -914,15 +970,23 @@ class start(QMainWindow):
         new_hdr = tbhdu.header  # Use the existing header of tbhdu
         new_hdr.add_comment("Spectrum processed with Spectrum Normalizer")
         new_hdr.add_comment("https://github.com/astrojohannes/normalizer")
-        vrad = self.gui.lineEdit_auto_velocity_shift.text()
+    
+        vrad = self.gui.lineEdit_telluric_vrad.text()
         if self.vradshift_applied:
-            vrad = self.gui.lineEdit_telluric_vrad.text()
             try:
                 vrad = str(round(float(vrad),2))
                 new_hdr['SN_RVVAL'] = (vrad, 'Rad. vel. in km/s from Spec. Normalizer')
                 new_hdr['SN_RVAPL'] = ('True', 'If True, spectrum was shifted by SN_RVVAL')
             except:
                 pass 
+        else:
+            try:
+                vrad = str(round(float(vrad),2))
+                new_hdr['SN_RVVAL'] = (vrad, 'Rad. vel. in km/s from Spec. Normalizer')
+                new_hdr['SN_RVAPL'] = ('False', 'If True, spectrum was shifted by SN_RVVAL')
+            except:
+                pass
+
  
         # Write the data to the output FITS file
         tbhdu.writeto(self.gui.lbl_fname2.text(), overwrite=True)
@@ -1746,8 +1810,8 @@ class start(QMainWindow):
         this_spec.flux = np.interp(this_spec.waveobs, this_spec.waveobs[mask], this_spec.flux[mask])
 
         #--- Radial Velocity determination with template -------------------------------
-        #template = self.read_template("./templates/NARVAL.Sun.370_1048nm/template.txt.gz")
-        template = self.read_template("./templates/Kitt_Peak_Flux_Atlas_2005.csv")
+        #template = self.read_template(os.environ['NORMALIZER_DIR']+"/templates/NARVAL.Sun.370_1048nm/template.txt.gz")
+        template = self.read_template(os.environ['NORMALIZER_DIR']+"/templates/Kitt_Peak_Flux_Atlas_2005.csv")
         #template['waveobs']=template['waveobs']*10.0    # convert to Angstroem
 
         # Check and interpolate missing data for template
