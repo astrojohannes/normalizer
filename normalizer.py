@@ -446,7 +446,7 @@ class start(QMainWindow):
         self.gui.ynorm = np.array([])
         self.gui.ynormcurrent=self.gui.ynorm
         self.gui.yi=np.array([])
-        self.gui.mask=np.array([])
+        #self.gui.mask=np.array([])
         self.gui.telluricmask=np.array([])
         
         if len(self.gui.x)>0:
@@ -468,9 +468,11 @@ class start(QMainWindow):
         # Standard telluric absorption bands
         self.create_telluric_mask()
 
+        self.linetable_mask()
+
         self.make_fig(0)
 
-        self.gui.tableWidget.clearContents()
+        #self.gui.tableWidget.clearContents()
 
         #self.fit_spline(showfit=False)
 
@@ -750,7 +752,9 @@ class start(QMainWindow):
 
         self.gui.ax[0].cla()
         self.gui.ax[1].cla()
-    
+   
+        mask = np.array([])
+ 
         # Read the input file
         if fitsfile.lower().endswith('.fits') or fitsfile.lower().endswith('.fit') or fitsfile.lower().endswith('.tfit') or fitsfile.lower().endswith('.tfits'):
             # If the input file is a FITS file, read it using Astropy's fits module
@@ -796,9 +800,20 @@ class start(QMainWindow):
                 else:
                     fluxcolumnnotfound = True
 
+                maskcolumnnotfound = False
+                if 'Mask' in available_cols: tablename_mask = 'Mask'
+                elif 'mask' in available_cols: tablename_mask = 'mask'
+                elif 'MASK' in available_cols: tablename_mask = 'MASK'
+                else:
+                    maskcolumnnotfound = True
+
                 if not wavecolumnnotfound and not fluxcolumnnotfound:
                     x = binary_table_hdu.data[tablename_wave].ravel()
                     y = binary_table_hdu.data[tablename_flux].ravel()
+
+                    if not maskcolumnnotfound:
+                        mask = np.array(binary_table_hdu.data[tablename_mask].ravel(),dtype=int)
+
                     hdr = binary_table_hdu.header
                 else:
                     # check primary header for WSTART, WEND and DELTA_W
@@ -813,6 +828,10 @@ class start(QMainWindow):
 
                         x = np.array(new_wave,dtype=np.float64)
                         y = np.array(binary_table_hdu.data[tablename_flux].ravel(),dtype=np.float64)
+
+                        if not maskcolumnnotfound:
+                            mask = np.array(binary_table_hdu.data[tablename_mask].ravel(),dtype=int)
+
                         hdr = binary_table_hdu.header
                     else:
                         # Let user select columns
@@ -907,10 +926,12 @@ class start(QMainWindow):
         self.gui.yi = np.array([])
         self.gui.knots_x = np.array([])
         self.gui.knots_y = np.array([])
-
-   
+        self.gui.mask = mask
+ 
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
+
+        #self.apply_mask()
 
         #self.fit_spline()
 
