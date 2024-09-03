@@ -190,6 +190,7 @@ class start(QMainWindow):
         self.vradshift_kms = 0.0
         self.vradshift_applied = False
         self.snr = None
+        self.rms = None
         self.renorm_factor_autovalue = 1.0
  
         self.gui.x=np.array([])     # origianl wavelength range
@@ -926,7 +927,14 @@ class start(QMainWindow):
         self.gui.yi = np.array([])
         self.gui.knots_x = np.array([])
         self.gui.knots_y = np.array([])
-        self.gui.mask = mask
+
+        # recover mask
+        # mask value 0...BAD/Telluric
+        # mask value 1...Line
+        # mask value 2...Continuum
+        normalizer_mask = np.ones_like(mask)
+        normalizer_mask[mask==2] = 0
+        self.gui.mask = np.array(normalizer_mask,dtype=bool)
  
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
@@ -1024,6 +1032,10 @@ class start(QMainWindow):
             except:
                 pass
 
+        if self.snr != None:
+            new_hdr['SN_SNR'] = (self.snr, 'signal-to-noise ratio measured by Normalizer')
+        if self.rms != None:
+            new_hdr['SN_RMS'] = (self.rms, 'continuum r.m.s. measured by Normalizer')
  
         # Write the data to the output FITS file
         tbhdu.writeto(self.gui.lbl_fname2.text(), overwrite=True)
@@ -1449,9 +1461,11 @@ class start(QMainWindow):
             valid_ycurrent = self.gui.ycurrent[~self.gui.mask & ~np.isnan(self.gui.ycurrent)]
             number_contpoints = len(valid_ycurrent)
             if len(valid_ycurrent) > 0:
-                rms = round(np.sqrt(np.mean((valid_ycurrent - np.mean(valid_ycurrent))**2)),3)
-                snr = round(1.0/rms,1)
-                mean = round((1.0/np.mean(valid_ycurrent)),3)
+                rms = round(np.sqrt(np.mean((valid_ycurrent - np.mean(valid_ycurrent))**2)),4)
+                snr = round(1.0/rms,2)
+                self.snr = snr
+                self.rms = rms
+                mean = round((1.0/np.mean(valid_ycurrent)),4)
                 if autorenorm:
                     self.gui.lineEdit_offset.setText(str(mean))
                 print(f"Normalized continuum (# points={number_contpoints}): MEAN={mean} RMS={rms}, SNR={snr}")
