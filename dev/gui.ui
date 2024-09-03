@@ -559,6 +559,18 @@
          </property>
          <item>
           <widget class="QLabel" name="label_13">
+           <property name="minimumSize">
+            <size>
+             <width>140</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>140</width>
+             <height>16777215</height>
+            </size>
+           </property>
            <property name="toolTip">
             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;A re-normalization factor &lt;span style=&quot; font-style:italic;&quot;&gt;f&lt;/span&gt; that is used to further shift the spectrum after the fit function is applied to the data, i.e. the normalized intensities are multiplied by 1/&lt;span style=&quot; font-style:italic;&quot;&gt;f&lt;/span&gt;.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
            </property>
@@ -566,6 +578,19 @@
             <string>Renorm Factor (f)</string>
            </property>
           </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_8">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>60</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <widget class="QLineEdit" name="lineEdit_offset">
@@ -577,15 +602,40 @@
            </property>
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>100</width>
              <height>0</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>100</width>
              <height>16777215</height>
             </size>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButton_renorm_factor_auto">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>100</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>100</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>auto</string>
            </property>
           </widget>
          </item>
@@ -658,6 +708,12 @@
              <height>0</height>
             </size>
            </property>
+           <property name="maximumSize">
+            <size>
+             <width>140</width>
+             <height>16777215</height>
+            </size>
+           </property>
            <property name="toolTip">
             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Line identification using mask dilation&lt;/span&gt;&lt;br/&gt;Line masks are identified in the normalized spectrum using iterative calculations of the mean and standard deviation (&lt;span style=&quot; font-style:italic;&quot;&gt;sigma&lt;/span&gt;). Peaks are identified using the high mask level (&lt;span style=&quot; font-style:italic;&quot;&gt;sigma_high&lt;/span&gt;), i.e. a datapoint is considered a peak when its intensity is &lt;span style=&quot; font-style:italic;&quot;&gt;sigma_high &lt;/span&gt;times higher than the mean. A second mask is generated using the &lt;span style=&quot; font-style:italic;&quot;&gt;sigma_low&lt;/span&gt; value. The final mask is then the result of expanding the high mask left- and rightwards of the peak down to the &lt;span style=&quot; font-style:italic;&quot;&gt;sigma_low &lt;/span&gt;level.&lt;br/&gt;Thus, lowering the high mask value will lead to an increase in identified lines, while lowering the low mask value will lead to an increase of the mask widths.&lt;br/&gt;&lt;br/&gt;&lt;br/&gt;The &lt;span style=&quot; font-weight:600;&quot;&gt;mode of line identification&lt;/span&gt; can be &lt;span style=&quot; font-style:italic;&quot;&gt;New&lt;/span&gt; or &lt;span style=&quot; font-style:italic;&quot;&gt;Add.Mode:New&lt;/span&gt; removes all previously identified lines (as given in the line mask table) and &lt;span style=&quot; font-style:italic;&quot;&gt;Mode: Add&lt;/span&gt; will add and/or update newly identified lines and widths.&lt;br/&gt;&lt;br/&gt;The &lt;span style=&quot; font-weight:600;&quot;&gt;Undo mask&lt;/span&gt; button will recover previous masks. Pressing the button multiple times will go iteratively go back in mask history.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
            </property>
@@ -673,7 +729,7 @@
            </property>
            <property name="sizeHint" stdset="0">
             <size>
-             <width>40</width>
+             <width>60</width>
              <height>20</height>
             </size>
            </property>
@@ -683,7 +739,7 @@
           <widget class="QLineEdit" name="lineEdit_sigma_high">
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>100</width>
              <height>0</height>
             </size>
            </property>
@@ -696,23 +752,10 @@
           </widget>
          </item>
          <item>
-          <spacer name="horizontalSpacer_4">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
           <widget class="QLineEdit" name="lineEdit_sigma_low">
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>100</width>
              <height>0</height>
             </size>
            </property>
@@ -775,6 +818,18 @@
          </item>
          <item>
           <widget class="QPushButton" name="pushButton_undo">
+           <property name="minimumSize">
+            <size>
+             <width>100</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>100</width>
+             <height>16777215</height>
+            </size>
+           </property>
            <property name="text">
             <string>Undo mask</string>
            </property>
@@ -891,6 +946,12 @@
              <height>0</height>
             </size>
            </property>
+           <property name="maximumSize">
+            <size>
+             <width>140</width>
+             <height>16777215</height>
+            </size>
+           </property>
            <property name="toolTip">
             <string>Shift limits for radial velocity determinations. Limits are currently fixed to +/- 300km/s.</string>
            </property>
@@ -906,7 +967,7 @@
            </property>
            <property name="sizeHint" stdset="0">
             <size>
-             <width>40</width>
+             <width>60</width>
              <height>20</height>
             </size>
            </property>
@@ -916,7 +977,7 @@
           <widget class="QLineEdit" name="lineEdit_auto_velocity_shift_lim1">
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>100</width>
              <height>0</height>
             </size>
            </property>
@@ -929,23 +990,10 @@
           </widget>
          </item>
          <item>
-          <spacer name="horizontalSpacer_6">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
           <widget class="QLineEdit" name="lineEdit_auto_velocity_shift_lim2">
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>100</width>
              <height>0</height>
             </size>
            </property>
@@ -990,19 +1038,6 @@
           </widget>
          </item>
          <item>
-          <spacer name="horizontalSpacer_2">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>5</width>
-             <height>5</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item>
           <widget class="QLineEdit" name="lineEdit_auto_velocity_shift">
            <property name="enabled">
             <bool>true</bool>
@@ -1015,13 +1050,13 @@
            </property>
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>100</width>
              <height>0</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>80</width>
+             <width>100</width>
              <height>16777215</height>
             </size>
            </property>

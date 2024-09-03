@@ -190,6 +190,7 @@ class start(QMainWindow):
         self.vradshift_kms = 0.0
         self.vradshift_applied = False
         self.snr = None
+        self.renorm_factor_autovalue = 1.0
  
         self.gui.x=np.array([])     # origianl wavelength range
         self.gui.y=np.array([])     # original spectrum
@@ -503,6 +504,7 @@ class start(QMainWindow):
         self.gui.pushButton_determine_rad_velocity.clicked.connect(self.determine_rad_velocity)
         self.gui.pushButton_undo.clicked.connect(self.undo_mask_change)
         self.gui.pushButton_shift_spectrum.clicked.connect(self.apply_velocity_shift)
+        self.gui.pushButton_renorm_factor_auto.clicked.connect(self.renorm_auto)
 
 #                                 IO PART
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -1411,8 +1413,15 @@ class start(QMainWindow):
             # Perform the final fit and update the plot
             self.fit_spline(showfit=True)
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def renorm_auto(self):
+        self.calc_rms(autorenorm=True)
+        self.fit_spline(showfit=True)
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
    
-    def calc_rms(self):
+    def calc_rms(self,autorenorm=False):
 
         if len(self.gui.mask)>1:
             # Calculate RMS of ycurrent where the mask is not NaN
@@ -1420,8 +1429,11 @@ class start(QMainWindow):
             number_contpoints = len(valid_ycurrent)
             if len(valid_ycurrent) > 0:
                 rms = round(np.sqrt(np.mean((valid_ycurrent - np.mean(valid_ycurrent))**2)),3)
-                snr = round(1/rms,1)
-                print(f"Normalized continuum (# points={number_contpoints}): RMS={rms}, SNR={snr}")
+                snr = round(1.0/rms,1)
+                mean = round((1.0/np.mean(valid_ycurrent)),3)
+                if autorenorm:
+                    self.gui.lineEdit_offset.setText(str(mean))
+                print(f"Normalized continuum (# points={number_contpoints}): MEAN={mean} RMS={rms}, SNR={snr}")
             else:
                 print("No valid data to calculate RMS.")
 
