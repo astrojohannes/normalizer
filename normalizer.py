@@ -217,11 +217,6 @@ class start(QMainWindow):
         # Identify the layout that contains the main parts, including the tableWidget
         layout = self.gui.horizontalLayout_main
 
-        # Standard telluric absorption bands
-        telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
-        self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
-        self.gui.lineEdit_telluric_vrad.setText('0.0')
-
         # Hide button to apply velo shift
         self.gui.pushButton_shift_spectrum.setVisible(True)
         self.gui.lineEdit_auto_velocity_shift.setVisible(True)
@@ -368,12 +363,13 @@ class start(QMainWindow):
             # and shift to the observed scale
             if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
                 telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text().strip().strip(','))
-                lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
 
+                tellurics_lambda_corrfactor = self.calc_tellurics_lambda_corrfactor()
                 if self.is_iterable(telluric_intervals[0]):
-                    telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+                    telluric_intervals = [(a * tellurics_lambda_corrfactor, b * tellurics_lambda_corrfactor) for a, b in telluric_intervals]
                 else:
                     telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
+                
 
                 # Filter and adjust the intervals based on the user selection
                 updated_intervals = []
@@ -403,6 +399,8 @@ class start(QMainWindow):
 
         self.linetable_mask()
         self.fit_spline()
+
+
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -467,9 +465,7 @@ class start(QMainWindow):
         self.gui.ax[1].cla()
 
         # Standard telluric absorption bands
-        telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
-        self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
-        self.gui.lineEdit_telluric_vrad.setText('0.0')
+        self.create_telluric_mask()
 
         self.make_fig(0)
 
@@ -680,6 +676,9 @@ class start(QMainWindow):
 
     def create_telluric_mask(self):
 
+        telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
+        self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
+
         if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
 
             # Initialize new array for telluric mask
@@ -688,9 +687,9 @@ class start(QMainWindow):
             # Parse the intervals from the telluric line edit
             # and shift to the observed scale
             telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text().strip().strip(','))
-            lambda_obs_factor=1/self.doppler_shift(float(self.gui.lineEdit_telluric_vrad.text()))
+            tellurics_lambda_corrfactor = self.calc_tellurics_lambda_corrfactor()
             if self.is_iterable(telluric_intervals[0]):
-                telluric_intervals = [(a * lambda_obs_factor, b * lambda_obs_factor) for a, b in telluric_intervals]
+                telluric_intervals = [(a * tellurics_lambda_corrfactor, b * tellurics_lambda_corrfactor) for a, b in telluric_intervals]
             else:
                 telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
 
@@ -700,6 +699,17 @@ class start(QMainWindow):
             return self.gui.telluricmask, telluric_intervals
         else:
             self.gui.telluricmask = np.array([])
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def calc_tellurics_lambda_corrfactor(self):
+        try:
+            user_vrad = float(self.gui.lineEdit_telluric_vrad.text())
+        except:
+            user_vrad = 0.0
+        tellurics_lambda_corrfactor = 1.0 / self.doppler_shift(user_vrad)
+
+        return tellurics_lambda_corrfactor
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -756,6 +766,10 @@ class start(QMainWindow):
                 if all(key in current_header for key in ['SN_RVAPL', 'SN_RVVAL']):
                     if bool(current_header['SN_RVAPL']):
                         self.gui.lineEdit_telluric_vrad.setText(str(current_header['SN_RVVAL']))
+                    else:
+                        self.gui.lineEdit_telluric_vrad.setText('0.0')
+
+                self.create_telluric_mask()
 
                 available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
                 
@@ -1194,111 +1208,6 @@ class start(QMainWindow):
         self.calc_rms()
 
 
-    def fit_spline_old(self, showfit=True):
-
-        """ Fit a spline using different methods
-            and the user input parameters
-        """
-
-        if len(self.gui.xcurrent)>1:
-
-            # update telluric mask
-            self.create_telluric_mask()
-
-            # apply both, telluric and line mask --> updates ymaskedcurrent
-            self.apply_mask()
-
-            ##############
-            # FITTING part
-            x, y = self.gui.xcurrent, self.gui.ycurrent
-
-            xlim_l=float(self.gui.ax[0].get_xlim()[0])
-            xlim_h=float(self.gui.ax[0].get_xlim()[1])
-
-            self.gui.xlim_l_last=xlim_l
-            self.gui.xlim_h_last=xlim_h
-                
-            k = int(self.gui.lineEdit_degree.text())
-            if k <=1: k=1
-            elif k>5: k=5
-    
-            # read user input: smoothing parameter
-            s = int(self.gui.lineEdit_smooth.text())
-    
-            # Note: the masked input array contains nan values, which InterpolatedUnivariateSpline cannot handle
-            # A workaround is to use zero weights for not-a-number data points:
-            w = np.isnan(self.gui.ymaskedcurrent)
-            weights = np.ones_like(y)
-            weights[w] = 0.0
-            
-            # if user provided fixpoints, raise their weights to assure that fit will intersect with these points
-            wu=self.gui.lineEdit_fixpoints.text()+','
-            wu=wu.split(',')
-            if len(wu)>0 and wu[0].strip() != '':
-                wu=np.array([float(a) for a in wu[:-1]],dtype=float)
-                for fp in wu:
-                    weights[self.find_nearest_idx(x,fp)]=1e9
-
-            if self.gui.comboBox_method.currentText()=='LSQUnivariateSpline':
-                
-                every=int(self.gui.lineEdit_interior_knots.text())
-
-                # Obtain the t array with step 'every'
-                t_indices = np.arange(1, len(x), every)  # Get the indices with the step 'every'.
-
-                if len(self.gui.ymaskedcurrent)>0:
-                    # filter these indices based on the non-NaN status in 'ymaskedcurrent'.
-                    final_indices = t_indices[~np.isnan(self.gui.ymaskedcurrent[t_indices])]
-                else:
-                    final_indices = t_indices
-
-                # Use these final indices to access the corresponding items in 'xcurrent'.
-                self.gui.knots_x = x[final_indices]
-                t = self.gui.knots_x
-
-                # do the fit
-                spl = self.gui.method(x, y, t, k=k, w=weights, check_finite=False, ext=3)
-                yi=np.copy(spl(x)).flatten()
-
-                if len(self.gui.ymaskedcurrent)>0 and len(yi)>0:
-                    self.gui.knots_y = np.copy(spl(self.gui.knots_x)).flatten()
-    
-            else:
-                # UnivariateSpline
-                # do the fit
-                # UnivariateSpline was found to have problems with large numeric y-values, so we down-scale to the mean
-                scalingfactor = np.nanmean(y)
-
-                if scalingfactor < 1000:
-                    scalingfactor = 1.0
-                spl = self.gui.method(x, y/scalingfactor, k=k, w=weights/scalingfactor, s=s, check_finite=True, ext=3)
-                spl.set_smoothing_factor(s)
-                yi=scalingfactor*np.copy(spl(x)).flatten()
-   
-            if self.gui.lineEdit_offset.text().strip()=='':
-                offs = 1.0
-            else:
-                try:
-                    offs = float(self.gui.lineEdit_offset.text())
-                except:
-                    offs = 1.0
-
-            ynorm = np.divide(y, np.array(yi), where=np.array(yi) != 0)
-            ynorm *= 1.0/offs
-
-            self.gui.yi = np.array(yi)
- 
-            if not len(self.gui.ynorm)>0:
-                self.gui.ynorm = ynorm
-            self.gui.ynormcurrent = ynorm
-
-            # now we set to NaN the telluric-masked regions
-            if len(self.gui.telluricmask)>0:
-                self.gui.yi[self.gui.telluricmask==0] = np.nan
-                self.gui.ynormcurrent[self.gui.telluricmask==0] = 1.0
-
-            self.make_fig(0,showfit=showfit)
-            self.make_fig(1,showfit=showfit)
 
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -1517,124 +1426,6 @@ class start(QMainWindow):
                 print("No valid data to calculate RMS.")
 
     
-
-    def identify_mask_old(self):
-        """ Identify/mask lines in normed spectrum
-            using rms measured over smoothed spectrum
-            iteratively until change in rms is less than 1 percent
-        """
-
-        self.mask_history.append(np.copy(self.gui.mask))
- 
-        if len(self.gui.ynormcurrent)>1:
-
-           # Check if the radio_maskmode_add is checked
-            if self.gui.radio_maskmode_new.isChecked():
-                # If so, delete old mask and start with a fresh mask
-                del self.gui.mask
-                self.gui.mask=np.array([])
-                self.gui.tableWidget.clearContents()
-
-            self.apply_mask()
-
-            x = np.copy(self.gui.xcurrent)
-            y = np.copy(self.gui.ynormcurrent)
-
-
-            if len(self.gui.telluricmask)>0:
-                xfit = x[self.gui.telluricmask != 0]
-                yfit = y[self.gui.telluricmask != 0]
-            else:
-                xfit = x
-                yfit = y
-
-            sigma_high=float(self.gui.lineEdit_sigma_high.text())
-            sigma_low=float(self.gui.lineEdit_sigma_low.text())        
-
-            iters=1     # we do several iterations in PeakMask
-            if self.gui.radio_maskmode_new.isChecked():
-                new_mask = np.array([True for x in yfit])
-            else:
-                new_mask = np.copy(self.gui.mask)
-
-            for i in range(iters):
-
-                if np.nansum(new_mask)==0:
-                    print(f"Stopping line identification early.")
-                    if 'yfit_pref' in locals():
-                        yfit = yfit_prev
-                    continue
-
-                yfit_prev = yfit
-
-                # Fit a 3rd degree polynomial to the data during first 2 iterations
-                # else do first degree
-                if i<2:
-                    coefficients = np.polyfit(xfit, yfit, 1)    # just skipt to 1st degree for the moment
-                else:
-                    coefficients = np.polyfit(xfit, yfit, 1) 
-
-                # Create a polynomial function from the coefficients
-                polynomial = np.poly1d(coefficients)
-
-                # Evaluate the polynomial at each x-value
-                fitted_y = polynomial(x)
-
-                # Divide the original y-values by the fitted ones
-                normed_y = self.gui.ynormcurrent / fitted_y
-
-                try:
-                    masker_high = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_high, rms_tolerance=0.1, maxnumber_iterations=1)
-                    masker_low = PeakMask(normed_y, sigma_smooth=1, sigma_threshold=sigma_low, rms_tolerance=0.1, maxnumber_iterations=1)
-
-                    mask_high, iter_high, rms_high = masker_high.create_mask()
-                    mask_low, iter_low, rms_low = masker_low.create_mask()
-
-                    self.snr = round(1/(0.5*((rms_high+rms_low))),1)
-
-                    print(f"Peak-finder performed {iter_high}/{iter_low} iterations for high/low mask. SNR: {self.snr}")
- 
-                except Exception as e:
-                    print(f"PeakMask failure in line identification:\n{e}")
-                    self.snr = None
-                    continue
-
-                mask_high[self.gui.telluricmask==0] = False
-                mask_low[self.gui.telluricmask==0] = False
-
-                try:
-                    new_mask = np.array(exp_mask(mask_high,constraint=mask_low, keep_mask=True, quiet=True),dtype=bool)
-                    # grow mask by user input
-                    #new_mask = np.array(exp_mask(new_mask, radius=1, keep_mask=True, quiet=True),dtype=bool)
-                except Exception as e:
-                    print(f"Exp_mask failure in line identification:\n{e}")
-                    self.snr = None
-                    continue
-
-                new_mask[self.gui.telluricmask==0] = False
-
-                # Masked values are replaced with np.nan
-                y[new_mask==True] = np.nan
-
-                # Prepare indices for interpolation
-                x_values = np.arange(len(y))
-
-                # Find the indices where new_mask is False
-                indices_false = np.where(~new_mask)[0]
-
-                # Interpolate y values at positions where new_mask is True
-                try:
-                    y[new_mask] = np.interp(x_values[new_mask], x_values[~new_mask], y[~new_mask])
-                    if len(new_mask)>0:
-                        self.gui.mask=new_mask
-                except Exception as e:
-                    print(f"{e}")
-
-                # xfit = x[new_mask != 0] # not needed anymore, since we perform no looping
-                # yfit = y[new_mask != 0]
-
-            self.fit_spline(showfit=True)
-
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
