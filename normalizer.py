@@ -1236,7 +1236,7 @@ class start(QMainWindow):
                     offs = 1.0
     
             ynorm = np.divide(y, np.array(yi), where=np.array(yi) != 0)
-            ynorm *= 1.0 / offs
+            ynorm /= offs
     
             self.gui.yi = np.array(yi)
     
@@ -1252,7 +1252,7 @@ class start(QMainWindow):
             self.make_fig(1, showfit=showfit)
 
         # calculate RMS of current plot zoom
-        self.calc_rms()
+        self.calc_rms(showresult=True)
 
 
 
@@ -1461,26 +1461,59 @@ class start(QMainWindow):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def renorm_auto(self):
+        self.gui.lineEdit_offset.setText('1')
+        self.fit_spline(showfit=True)
         self.calc_rms(autorenorm=True)
         self.fit_spline(showfit=True)
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
    
-    def calc_rms(self,autorenorm=False):
+    def calc_rms(self,autorenorm=False,showresult=False):
 
         if len(self.gui.mask)>1:
             # Calculate RMS of ycurrent where the mask is not NaN
-            valid_ycurrent = self.gui.ycurrent[~self.gui.mask & ~np.isnan(self.gui.ycurrent)]
+            valid_ycurrent = np.copy(self.gui.ynormcurrent)[~np.isnan(self.gui.ymaskedcurrent)]
+            valid_xcurrent = np.copy(self.gui.xcurrent)[~np.isnan(self.gui.ymaskedcurrent)]
             number_contpoints = len(valid_ycurrent)
-            if len(valid_ycurrent) > 0:
+            if number_contpoints > 0:
                 rms = round(np.sqrt(np.mean((valid_ycurrent - np.mean(valid_ycurrent))**2)),4)
-                snr = round(1.0/rms,2)
+                snr = round(1.0/rms,3)
                 self.snr = snr
                 self.rms = rms
-                mean = round((1.0/np.mean(valid_ycurrent)),4)
+                normed_cont_mean = round((np.mean(valid_ycurrent)),4)
+                if showresult:
+                    print(f"Normalized continuum (# points={number_contpoints}): MEAN={normed_cont_mean} RMS={rms}, SNR={snr}")
+
                 if autorenorm:
-                    self.gui.lineEdit_offset.setText(str(mean))
-                print(f"Normalized continuum (# points={number_contpoints}): MEAN={mean} RMS={rms}, SNR={snr}")
+
+                    # Step 2: Finding peaks in windows of size 10 in value units
+                    window_size = 10
+                    peaks = []
+
+                    # We need to start at the minimum value of valid_ycurrent
+                    start_value = np.min(valid_xcurrent)
+                    current_start = start_value
+
+                    while current_start < np.max(valid_xcurrent):
+                        # Create the window based on value units, not array length
+                        window = valid_ycurrent[(valid_xcurrent >= current_start) & (valid_xcurrent < current_start + window_size)]
+
+                        if len(window) > 0:
+                            # Find the peak (maximum) in the current window
+                            peak = np.max(window)
+                            peaks.append(peak)
+
+                        # Move to the next window by shifting by the window size (10 units)
+                        current_start += window_size
+
+                    # Step 3: Calculate the mean of the peaks
+                    if len(peaks) > 0:
+                        mean_of_peaks = round(np.mean(peaks), 4)
+                        print(f"Auto renorm value from mean of peaks: {mean_of_peaks}")
+
+                        # Use the mean of peaks for re-normalization if required
+                        self.gui.lineEdit_offset.setText(str(round(mean_of_peaks, 4)))
+
             else:
                 print("No valid data to calculate RMS.")
 
@@ -1806,7 +1839,13 @@ class start(QMainWindow):
 
     def apply_velocity_shift(self):
 
-        self.vradshift_aa = 1.0/self.doppler_shift(self.vradshift_kms)
+        try:
+            vradshift_kms = float(self.gui.lineEdit_auto_velocity_shift.text())
+        except:
+            vradshift_kms = 0.0
+            print("Velocity shift value is invald.")
+
+        self.vradshift_aa = 1.0/self.doppler_shift(vradshift_kms)
  
         self.gui.xcurrent = self.gui.xcurrent * self.vradshift_aa
         self.gui.x = self.gui.x * self.vradshift_aa
@@ -1848,7 +1887,7 @@ class start(QMainWindow):
             vrad_tell = 0.0
 
         self.gui.lineEdit_telluric_vrad.setReadOnly(False)
-        self.gui.lineEdit_telluric_vrad.setText(str(round(vrad_tell+float(self.vradshift_kms),3)))
+        self.gui.lineEdit_telluric_vrad.setText(str(round(vrad_tell+float(vradshift_kms),3)))
         self.gui.lineEdit_telluric_vrad.setReadOnly(True)
 
         self.fit_spline()
