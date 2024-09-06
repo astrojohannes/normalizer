@@ -181,10 +181,11 @@ class start(QMainWindow):
         self.gui.lineEdit_interior_knots.setText('200')
         self.gui.lineEdit_offset.setText('1.0')
         self.gui.lineEdit_auto_velocity_shift.setText('0.0')
-        self.gui.lineEdit_auto_velocity_shift_lim1.setText('-300')
-        self.gui.lineEdit_auto_velocity_shift_lim2.setText('300')
+        self.gui.lineEdit_auto_velocity_shift_lim1.setText('-400')
+        self.gui.lineEdit_auto_velocity_shift_lim2.setText('400')
         self.gui.lineEdit_auto_velocity_shift_lim1.setReadOnly(True)
         self.gui.lineEdit_auto_velocity_shift_lim2.setReadOnly(True)
+        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
 
         self.vradshift_aa = []
         self.vradshift_kms = 0.0
@@ -236,6 +237,8 @@ class start(QMainWindow):
 
         # Install the event filter for the table
         self.gui.tableWidget.installEventFilter(self)
+
+        self.c = 299792.458  # speed of light in km/s
 
     def closeEvent(self, event):
         # Close the plotwindow when the main window is about to close
@@ -429,6 +432,11 @@ class start(QMainWindow):
         self.gui.knots_y = np.array([])
 
         # preserve masks
+
+        # handle strange case where length of self.gui.mask is greater by 1 than length of original self.gui.xcurrent
+        if len(self.gui.mask)-len(indices):
+            self.gui.mask = self.gui.mask[:-1]
+
         if len(self.gui.telluricmask)>0: self.gui.telluricmask=self.gui.telluricmask[indices]
         if len(self.gui.mask)>0: self.gui.mask=self.gui.mask[indices]
         if len(self.gui.ymaskedcurrent)>0: self.gui.ymaskedcurrent[indices]
@@ -732,11 +740,10 @@ class start(QMainWindow):
         float
             The shifted wavelength.
         """
-        c = 299792.458  # speed of light in km/s
 
         # Scale factor: sf = lambda_observed/lambda_emitted
 
-        sf = np.sqrt((c + v_rad)/(c - v_rad))
+        sf = np.sqrt((self.c + v_rad)/(self.c - v_rad))
 
         return sf
 
@@ -772,10 +779,15 @@ class start(QMainWindow):
                 current_header = hdus[1].header
                 if all(key in current_header for key in ['SN_RVAPL', 'SN_RVVAL']):
                     if bool(current_header['SN_RVAPL']):
+                        self.gui.lineEdit_telluric_vrad.setReadOnly(False)
                         self.gui.lineEdit_telluric_vrad.setText(str(current_header['SN_RVVAL']))
+                        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
+ 
                     else:
+                        self.gui.lineEdit_telluric_vrad.setReadOnly(False) 
                         self.gui.lineEdit_telluric_vrad.setText('0.0')
-
+                        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
+ 
                 self.create_telluric_mask()
 
                 available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
@@ -1624,13 +1636,110 @@ class start(QMainWindow):
         """ Gaussian function to fit the peak """
         return a * np.exp(-(x - b)**2 / (2 * c**2))
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def read_template(self, file_path):
         #data = np.genfromtxt(file_path, dtype=[('waveobs', np.float64), ('flux', np.float64), ('err', np.float64)])
         data = np.genfromtxt(file_path, dtype=[('waveobs', np.float64), ('flux', np.float64)])
         return data.view(np.recarray)
 
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
+    def optimize_velocity_shift(self, dw, df, tw, tf):
+
+        # Initial parameters for the coarse search
+        steps = [
+            {'drv': 1.0, 'vmin': -400.0, 'vmax': 400.0},
+            {'drv': 0.5, 'vmin': -250.0, 'vmax': 250.0},
+            {'drv': 0.1, 'vmin': -100.0, 'vmax': 100.0}
+        ]
+        
+
+        rv_corrections_kms = []
+        i=0
+        for step in steps:
+            i+=1
+            drv = step['drv']
+            vmin = step['vmin']
+            vmax = step['vmax']
+            
+
+            if i==1: # First iteration on coarse grid
+                # Carry out the cross-correlation with the current parameters
+                rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, vmin, vmax, drv, skipedge=0)
+
+                # Find the index of the maximum cross-correlation function
+                maxind = np.argmax(cc)
+
+                # Convert the radial velocity shift to a shift in wavelength
+                mean_wavelength = np.mean(dw)
+                rw = mean_wavelength - mean_wavelength * 1.0/self.doppler_shift(rv)
+
+                # Print the current maximum shift
+                print(f"Coarse iteration {i}: Cross-correlation function is maximized at dRV = {rv[maxind]} km/s")
+                print(f"Coarse iteration {i}: Cross-correlation function is maximized at dRV = {rw[maxind]} AA")
+
+                rvmax = rv[maxind]
+                rv_corrections_kms.append(rvmax)
+                dw = dw * 1.0/self.doppler_shift(rvmax)
+
+
+            elif i==2: # Second iteration on coarse grid
+
+                # Carry out the cross-correlation with the current parameters
+                rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, vmin, vmax, drv, skipedge=0)
+
+                # Find the index of the maximum cross-correlation function
+                maxind = np.argmax(cc)
+
+                # Convert the radial velocity shift to a shift in wavelength
+                mean_wavelength = np.mean(dw)
+                rw = mean_wavelength - mean_wavelength * 1.0/self.doppler_shift(rv)
+
+                # Print the current maximum shift
+                print(f"Coarse iteration {i}: Cross-correlation function is maximized at dRV = {rv[maxind]} km/s")
+                print(f"Coarse iteration {i}: Cross-correlation function is maximized at dRV = {rw[maxind]} AA")
+
+                rvmax = rv[maxind]
+                rv_corrections_kms.append(rvmax)
+                dw = dw * 1.0/self.doppler_shift(rvmax)
+
+
+            else: # Refine
+                # Update vmin,vmax
+                deltashift=99999
+                while deltashift > 0.05 and i < 20:
+                    rvmax_prev = rvmax
+                    # Carry out the cross-correlation with the current parameters
+                    rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, vmin, vmax, drv, skipedge=0)
+    
+                    # Find the index of the maximum cross-correlation function
+                    maxind = np.argmax(cc)
+    
+                    # Convert the radial velocity shift to a shift in wavelength
+                    mean_wavelength = np.mean(dw)
+                    rw = mean_wavelength - mean_wavelength * 1.0/self.doppler_shift(rv)
+    
+                    # Print the current maximum shift
+                    print(f"Fine iteration {i}: Cross-correlation function is maximized at dRV = {rv[maxind]} km/s")
+                    print(f"Fine iteration {i}: Cross-correlation function is maximized at dRV = {rw[maxind]} AA")
+          
+                    rvmax = rv[maxind]
+                    rv_corrections_kms.append(rvmax)
+                    dw = dw * 1.0/self.doppler_shift(rvmax)
+
+                    deltashift = abs(rvmax)
+
+                    i+=1
+
+        rv_correction_kms = np.sum(rv_corrections_kms)
+
+        return rv,rw,cc,maxind,rv_correction_kms
+
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def determine_rad_velocity(self):
-        c = 299792.458  # speed of light in km/s
+        c = self.c
 
         if len(self.gui.ynormcurrent)>0:
             waveobs,flux=np.array(self.gui.xcurrent,dtype=np.float64),np.array(self.gui.ynormcurrent,dtype=np.float64)
@@ -1673,24 +1782,11 @@ class start(QMainWindow):
         plt.show()
         """
 
-        # Carry out the cross-correlation.
-        # The RV-range is -300 - +300 km/s in steps of 0.1 km/s.
-        rv, cc = pyasl.crosscorrRV(dw, df, tw, tf, -300., 300., 0.1, skipedge=0)
+        # Carry out iteratively the cross-correlation.
+        rv,rw,cc,maxind,rv_correction_kms = self.optimize_velocity_shift(dw, df, tw, tf)
 
-        # Find the index of maximum cross-correlation function
-        maxind = np.argmax(cc)
+        self.vradshift_kms = rv_correction_kms
 
-        # Convert the radial velocity shift to a shift in wavelength.
-        # Assume a mean wavelength for the conversion. 
-        mean_wavelength = np.mean(dw)  # or any specific wavelength you are interested in
-        rw = mean_wavelength * (rv / c)
-
-        self.vradshift_aa = rv[maxind] / c
-        self.vradshift_kms = rv[maxind]
-
-        print("Cross-correlation function is maximized at dRV = ", rv[maxind], " km/s")
-        print("Cross-correlation function is maximized at dRV = ", rw[maxind], " AA")
- 
         if rv[maxind] > 0.0:
             print("  A red-shift with respect to the template")
         else:
@@ -1699,20 +1795,22 @@ class start(QMainWindow):
         fig = plt.figure(figsize=(10,6))
         plt.plot(rw, cc/np.nanmax(cc), 'bp-')
         plt.plot(rw[maxind], cc[maxind]/np.nanmax(cc), 'ro')
-        plt.text(rw[maxind]+0.1,cc[maxind]/np.nanmax(cc),"R$_V$="+str(round(rv[maxind],3))+" km s$^{-1}$")
+        plt.text(rw[maxind]+0.1,cc[maxind]/np.nanmax(cc),"R$_V$="+str(round(self.vradshift_kms,3))+" km s$^{-1}$")
         plt.xlabel('R$_V$ [Å]')
         plt.tight_layout()
         plt.show(block=False)
 
-        self.gui.lineEdit_auto_velocity_shift.setReadOnly(False)
-        self.gui.lineEdit_auto_velocity_shift.setText(str(round(rv[maxind],3)))
-        self.gui.lineEdit_auto_velocity_shift.setReadOnly(True)
+        self.gui.lineEdit_auto_velocity_shift.setText(str(round(self.vradshift_kms,3)))
  
+# %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
+
     def apply_velocity_shift(self):
+
+        self.vradshift_aa = 1.0/self.doppler_shift(self.vradshift_kms)
  
-        self.gui.xcurrent -= self.gui.xcurrent*(self.vradshift_aa)/2.0
-        self.gui.x -= self.gui.x*(self.vradshift_aa)/2.0
-        self.gui.xzoom -= self.gui.xzoom*(self.vradshift_aa)/2.0
+        self.gui.xcurrent = self.gui.xcurrent * self.vradshift_aa
+        self.gui.x = self.gui.x * self.vradshift_aa
+        self.gui.xzoom = self.gui.xzoom * self.vradshift_aa
 
         self.vradshift_applied = True
 
@@ -1738,7 +1836,7 @@ class start(QMainWindow):
                 # Skip rows with non-numeric data
                 continue
 
-            center_value -= float(item_center.text())*(self.vradshift_aa)
+            center_value = float(item_center.text()) * self.vradshift_aa
             width_value = float(item_width.text())
 
             table.setItem(row, 0, QTableWidgetItem(str(round(center_value, 3))))
@@ -1749,7 +1847,9 @@ class start(QMainWindow):
         except:
             vrad_tell = 0.0
 
+        self.gui.lineEdit_telluric_vrad.setReadOnly(False)
         self.gui.lineEdit_telluric_vrad.setText(str(round(vrad_tell+float(self.vradshift_kms),3)))
+        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
 
         self.fit_spline()
         self.make_fig(0)

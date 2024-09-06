@@ -212,7 +212,7 @@
       <x>20</x>
       <y>70</y>
       <width>779</width>
-      <height>772</height>
+      <height>792</height>
      </rect>
     </property>
     <layout class="QHBoxLayout" name="horizontalLayout_main">
@@ -220,7 +220,7 @@
       <number>3</number>
      </property>
      <item>
-      <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0">
+      <layout class="QVBoxLayout" name="verticalLayout" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0">
        <property name="spacing">
         <number>4</number>
        </property>
@@ -634,6 +634,9 @@
              <height>16777215</height>
             </size>
            </property>
+           <property name="toolTip">
+            <string>Automatic calculation of the renorm factor based on the mean of unflagged (continuum) datapoints in the normalized spectrum.</string>
+           </property>
            <property name="text">
             <string>auto</string>
            </property>
@@ -953,7 +956,7 @@
             </size>
            </property>
            <property name="toolTip">
-            <string>Shift limits for radial velocity determinations. Limits are currently fixed to +/- 300km/s.</string>
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Shift limits for radial velocity determinations via cross-correlation. Limits are currently fixed to +/- 400km/s.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
            </property>
            <property name="text">
             <string>Shift limits (km/s)</string>
@@ -1008,34 +1011,72 @@
         </layout>
        </item>
        <item>
+        <widget class="QPushButton" name="pushButton_determine_rad_velocity">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+           <horstretch>1</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>40</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>9999</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Auto-determine the radial velocity in km/s. The result will be entered into the line edit field below, but not yet applied to the spectrum.</string>
+         </property>
+         <property name="text">
+          <string>Determine vel. shift by cross-correlation</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <layout class="QHBoxLayout" name="horizontalLayout_12">
          <property name="spacing">
           <number>0</number>
          </property>
          <item>
-          <widget class="QPushButton" name="pushButton_determine_rad_velocity">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-             <horstretch>1</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
+          <widget class="QLabel" name="label_18">
            <property name="minimumSize">
             <size>
-             <width>40</width>
+             <width>140</width>
              <height>0</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>9999</width>
+             <width>140</width>
              <height>16777215</height>
             </size>
            </property>
+           <property name="toolTip">
+            <string>This is the radial velocity (shift) in km/s of the spectrum with respect to rest-frame air. The spectrum will be shifted accordingly after the &quot;Apply shift&quot; button below is clicked.</string>
+           </property>
            <property name="text">
-            <string>Determine vel. shift</string>
+            <string>Shift value (km/s)</string>
            </property>
           </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer_9">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>60</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
          </item>
          <item>
           <widget class="QLineEdit" name="lineEdit_auto_velocity_shift">
@@ -1064,7 +1105,7 @@
             <string>This is the last determined velocity shift.</string>
            </property>
            <property name="readOnly">
-            <bool>true</bool>
+            <bool>false</bool>
            </property>
           </widget>
          </item>
@@ -1085,7 +1126,7 @@
           </size>
          </property>
          <property name="text">
-          <string>Shift spectrum</string>
+          <string>Apply shift (km/s)</string>
          </property>
         </widget>
        </item>
