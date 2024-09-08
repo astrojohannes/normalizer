@@ -185,7 +185,6 @@ class start(QMainWindow):
         self.gui.lineEdit_auto_velocity_shift_lim2.setText('400')
         self.gui.lineEdit_auto_velocity_shift_lim1.setReadOnly(True)
         self.gui.lineEdit_auto_velocity_shift_lim2.setReadOnly(True)
-        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
 
         self.vradshift_aa = []
         self.vradshift_kms = 0.0
@@ -381,17 +380,18 @@ class start(QMainWindow):
                 for a, b in telluric_intervals:
                     if b <= x0 or a >= x1:
                         # Interval is completely outside user selection, keep it as is
-                        updated_intervals.append((a, b))
+                        updated_intervals.append((a/tellurics_lambda_corrfactor, b/tellurics_lambda_corrfactor))
                     elif a < x0 and b > x1:
                         # User selection is completely within the interval, split it into two
-                        updated_intervals.append((a, x0))
-                        updated_intervals.append((x1, b))
+                        updated_intervals.append((a/tellurics_lambda_corrfactor, x0/tellurics_lambda_corrfactor))
+                        updated_intervals.append((x1/tellurics_lambda_corrfactor, b/tellurics_lambda_corrfactor))
                     elif a < x0 <= b:
                         # Only the upper part of the interval overlaps with user selection
-                        updated_intervals.append((a, x0))
+                        updated_intervals.append((a/tellurics_lambda_corrfactor, x0/tellurics_lambda_corrfactor))
                     elif a >= x0 and b > x1:
+ 
                         # Only the lower part of the interval overlaps with user selection
-                        updated_intervals.append((x1, b))
+                        updated_intervals.append((x1/tellurics_lambda_corrfactor, b/tellurics_lambda_corrfactor))
                     # If the interval is entirely within the user selection, it gets removed (no action required)
 
                 # Convert the updated intervals back to string format for the line edit
@@ -475,7 +475,7 @@ class start(QMainWindow):
         self.gui.ax[1].cla()
 
         # Standard telluric absorption bands
-        self.create_telluric_mask()
+        self.create_telluric_mask(initialize_from_models=True)
 
         self.linetable_mask()
 
@@ -542,7 +542,6 @@ class start(QMainWindow):
             self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
-        self.make_fig(0)
         self.on_reset_pressed()
  
 
@@ -687,10 +686,10 @@ class start(QMainWindow):
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
-    def create_telluric_mask(self):
-
-        telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
-        self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
+    def create_telluric_mask(self, initialize_from_models=False):
+        if initialize_from_models:
+            telluric_intervals = self.find_telluric_intervals(os.environ['NORMALIZER_DIR']+"/skycalc_molec_abs.txt")
+            self.gui.lineEdit_telluric.setText(', '.join('({}, {})'.format(*t) for t in telluric_intervals))
 
         if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
 
@@ -712,6 +711,8 @@ class start(QMainWindow):
             return self.gui.telluricmask, telluric_intervals
         else:
             self.gui.telluricmask = np.array([])
+
+        return self.gui.telluricmask, None
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
@@ -788,7 +789,7 @@ class start(QMainWindow):
                         self.gui.lineEdit_telluric_vrad.setText('0.0')
                         self.gui.lineEdit_telluric_vrad.setReadOnly(True)
  
-                self.create_telluric_mask()
+                self.create_telluric_mask(initialize_from_models=True)
 
                 available_cols = binary_table_hdu.data.columns.names  # Get the list of available columns
                 
@@ -1092,15 +1093,9 @@ class start(QMainWindow):
         # plot telluric regions
         if figid == 0 and showfit:
 
-            if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
-
-                _, telluric_intervals = self.create_telluric_mask()
-
-                if not self.is_iterable(telluric_intervals[0]):
-                    telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
-
-                for start, end in telluric_intervals:
-                    ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.2, label='telluric')
+            _, telluric_intervals = self.create_telluric_mask()
+            for start, end in telluric_intervals:
+                ax[0].fill_betweenx(np.linspace(min(y), max(y), 10), start, end, color='red', alpha=0.2, label='telluric')
 
         ax[1].set_xlabel('wavelength [AA]')
 
@@ -1164,9 +1159,9 @@ class start(QMainWindow):
     def fit_spline(self, showfit=True):
         """ Fit a spline using different methods and the user input parameters """
         if len(self.gui.xcurrent) > 1:
-            # update telluric mask
+
             self.create_telluric_mask()
-    
+ 
             # apply both, telluric and line mask --> updates ymaskedcurrent
             self.apply_mask()
     
@@ -1886,9 +1881,7 @@ class start(QMainWindow):
         except:
             vrad_tell = 0.0
 
-        self.gui.lineEdit_telluric_vrad.setReadOnly(False)
         self.gui.lineEdit_telluric_vrad.setText(str(round(vrad_tell+float(vradshift_kms),3)))
-        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
 
         self.fit_spline()
         self.make_fig(0)

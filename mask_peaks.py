@@ -46,7 +46,7 @@ class PeakMask:
                 new_rms = np.ma.std(masked_ysmooth)
             else:
                 # If all True, break the loop and revert to last acceptable states
-                print("All values in mask are True. Stopping here.")
+                #print("All values in mask are True. Stopping here.")
                 new_rms = last_rms  # Revert RMS to last acceptable value
                 break  # Exit the loop
 
@@ -59,7 +59,7 @@ class PeakMask:
                     break
 
             else:   # rms = 0
-                print("RMS is zero. Stopping here.")
+                #print("RMS is zero. Stopping here.")
                 break
     
         return np.array(self.mask if last_acceptable_mask is not None else mask, dtype=bool), i, last_rms 
