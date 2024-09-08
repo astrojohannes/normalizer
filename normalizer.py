@@ -273,7 +273,8 @@ class start(QMainWindow):
 
         if flagtype=='BAD':
             self.mask_history.append(np.copy(self.gui.mask))
-            self.gui.lineEdit_telluric.setText(f"{tellurics}, ({x0},{x1})")
+            tellurics_lambda_corrfactor = self.calc_tellurics_lambda_corrfactor()
+            self.gui.lineEdit_telluric.setText(f"{tellurics}, ({x0/tellurics_lambda_corrfactor},{x1/tellurics_lambda_corrfactor})")
 
         elif flagtype=='LINE':
             self.mask_history.append(np.copy(self.gui.mask))
@@ -780,14 +781,10 @@ class start(QMainWindow):
                 current_header = hdus[1].header
                 if all(key in current_header for key in ['SN_RVAPL', 'SN_RVVAL']):
                     if bool(current_header['SN_RVAPL']):
-                        self.gui.lineEdit_telluric_vrad.setReadOnly(False)
                         self.gui.lineEdit_telluric_vrad.setText(str(current_header['SN_RVVAL']))
-                        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
  
                     else:
-                        self.gui.lineEdit_telluric_vrad.setReadOnly(False) 
                         self.gui.lineEdit_telluric_vrad.setText('0.0')
-                        self.gui.lineEdit_telluric_vrad.setReadOnly(True)
  
                 self.create_telluric_mask(initialize_from_models=True)
 
