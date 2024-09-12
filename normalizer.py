@@ -543,6 +543,7 @@ class start(QMainWindow):
             self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
+        #self.on_reset_pressed()
  
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -753,6 +754,8 @@ class start(QMainWindow):
 
     def readfits(self, fitsfile, hduid=0):
 
+        self.on_reset_pressed()
+
         # store the path of the input filename for later use when saving
         self.userpath = os.path.dirname(fitsfile)
 
@@ -948,7 +951,7 @@ class start(QMainWindow):
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
 
-        self.on_reset_pressed()
+        #self.on_reset_pressed()
 
         #self.apply_mask()
 
@@ -1672,6 +1675,11 @@ class start(QMainWindow):
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
 
     def optimize_velocity_shift(self, dw, df, tw, tf):
+
+       # Limit dw to the range 4650 to 6950
+        mask = (dw >= 4650) & (dw <= 6950)
+        dw = dw[mask]
+        df = df[mask]
 
         # Initial parameters for the coarse search
         steps = [
