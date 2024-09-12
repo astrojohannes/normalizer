@@ -543,7 +543,6 @@ class start(QMainWindow):
             self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
-        self.on_reset_pressed()
  
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
@@ -948,6 +947,8 @@ class start(QMainWindow):
  
         self.gui.xlim_h_last=0
         self.gui.xlim_l_last=0
+
+        self.on_reset_pressed()
 
         #self.apply_mask()
 
