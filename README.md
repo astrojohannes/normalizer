@@ -4,16 +4,23 @@
 The *normalizer* is an interactive 1D spectrum normalizer tool. It comes with two different spline fitting routines (*UnivariateSpline* and *LSQUnivariateSpline*) and offers the possibility to define masks (line windows), either user-defined ones or automatic masking via peak identification.
 
 ## Requirements
-First of all, make sure to have **Python 3.X** and all other requirements installed. Currently, these are:
+First of all, make sure to have **Python 3.X < 3.12** and all other requirements installed. Currently, these are:
 
-astropy (5.2.2), matplotlib (3.7.4), numpy (1.24.4), pandas (1.5.3), PyAstronomy (0.21.0), PyQt5 (5.15.10), PyQt5_sip (12.11.1), SciPy (1.10.1)
+astropy (5.2.2), matplotlib (3.7.4), numpy (1.24.4), pandas (1.5.3), PyAstronomy (0.21.0), PyQt5 (5.15.10), PyQt5_sip, SciPy (1.10.1)
 
-The numbers in brackets indicate module versions used during development. Earlier/later versions may work as well.
+The numbers in brackets indicate module versions used during development. Earlier/later versions may work as well. However, take note that
+**Python > 3.12** may cause problems.
 
-## Install
+## Install using a virtual environment
 Download from GitHub or clone:
 ```
 git clone https://github.com/astrojohannes/normalizer
+
+python3.11 -m venv venv
+
+source venv/bin/activate
+
+pip install -r requirements.txt
 ```
 
 ## How to execute

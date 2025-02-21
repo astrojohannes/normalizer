@@ -4,5 +4,5 @@ numpy==1.24.4
 pandas==1.5.3
 PyAstronomy==0.21.0
 PyQt5==5.15.10
-PyQt5_sip==12.11.1
+PyQt5_sip
 SciPy==1.10.1
