@@ -1787,6 +1787,10 @@ class start(QMainWindow):
             self.gui.lineEdit_auto_velocity_shift.setText('0.0')
             return
 
+        self.gui.setEnabled(False)
+        self.plotwindow.setEnabled(False)
+
+
         err=np.array([0.0 for a in range(len(self.gui.xcurrent))],dtype=np.float64)
         this_arr=np.vstack((waveobs,flux,err))
         this_spec=np.core.records.fromrecords(this_arr.T, names='waveobs,flux,err')
@@ -1839,6 +1843,9 @@ class start(QMainWindow):
         plt.xlabel('R$_V$ [Å]')
         plt.tight_layout()
         plt.show(block=False)
+
+        self.gui.setEnabled(True)
+        self.plotwindow.setEnabled(True)
 
         self.gui.lineEdit_auto_velocity_shift.setText(str(round(self.vradshift_kms,3)))
  
