@@ -366,6 +366,8 @@ class start(QMainWindow):
             # unflag tellurics
             # Parse the intervals from the telluric line edit
             # and shift to the observed scale
+
+
             if self.gui.lineEdit_telluric.text().strip().strip(',') != '' and len(self.gui.lineEdit_telluric.text().strip().strip(','))>0:
                 telluric_intervals = ast.literal_eval(self.gui.lineEdit_telluric.text().strip().strip(','))
 
@@ -374,7 +376,6 @@ class start(QMainWindow):
                     telluric_intervals = [(a * tellurics_lambda_corrfactor, b * tellurics_lambda_corrfactor) for a, b in telluric_intervals]
                 else:
                     telluric_intervals = self.fix_telluric_intervals_notalist(telluric_intervals)
-                
 
                 # Filter and adjust the intervals based on the user selection
                 updated_intervals = []
@@ -396,10 +397,15 @@ class start(QMainWindow):
                     # If the interval is entirely within the user selection, it gets removed (no action required)
 
                 # Convert the updated intervals back to string format for the line edit
-                updated_intervals_str = str(updated_intervals).replace(' ', '').replace('[','').replace(']','')  # Format it to match the original input format
+                #updated_intervals_str = str(updated_intervals).replace(' ', '').replace('[','').replace(']','')  # Format it to match the original input format
+
+                updated_intervals_str = ','.join(f"({float(a):.6f},{float(b):.6f})" for a, b in updated_intervals)
+
 
                 # Set the updated string back to the QLineEdit
                 self.gui.lineEdit_telluric.setText(updated_intervals_str)
+
+
         else:
             print("Flag type unknown.")
 
@@ -543,7 +549,7 @@ class start(QMainWindow):
             self.gui.lbl_fname.setText(filename)
 
         self.readfits(filename)
-        #self.on_reset_pressed()
+        self.on_reset_pressed()
  
 
 # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% #
